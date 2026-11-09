@@ -3,8 +3,9 @@
  * Face art is drawn in a 100 x 134 unit box (the face of an upright tile).
  * The Chinese characters come from a tiny subset of Noto Serif TC (SIL OFL, see CREDITS.md).
  */
-import { BAMBOO, CHARS, DOTS, DRAGONS, FLOWERS, SEASONS, WINDS, rankOf, suitOf } from '../game/tiles';
+import { BAMBOO, CHARS, DOTS, DRAGONS, FLOWERS, WINDS, rankOf, suitOf } from '../game/tiles';
 import cjkUrl from '../assets/cjk-subset.woff2';
+import { drawGardenFace } from './gardenTiles';
 
 export const FACE_W = 100;
 export const FACE_H = 134;
@@ -58,6 +59,8 @@ export const CONTRAST: Palette = {
 };
 
 export interface FaceOptions {
+  /** 'garden': illustrated pictures (default); 'classic': traditional Mahjong faces */
+  set: 'garden' | 'classic';
   palette: Palette;
   /** small rank / wind letter in the top-left corner */
   indices: boolean;
@@ -379,7 +382,7 @@ function drawDragon(ctx: C, n: number, p: Palette) {
   }
 }
 
-// ---------------------------------------------------------------- flowers and seasons
+// ---------------------------------------------------------------- flowers
 
 function branch(ctx: C, pts: number[], color: string, w = 3) {
   ctx.save();
@@ -471,29 +474,6 @@ function chrysanthemum(ctx: C, p: Palette) {
   ctx.restore();
 }
 
-function bambooFlower(ctx: C, p: Palette) {
-  stick(ctx, 40, 48, 40, p.green, -0.08, 7);
-  stick(ctx, 43, 90, 40, p.green, -0.08, 7);
-  stick(ctx, 64, 60, 34, lighten(p.green, 0.15), 0.1, 5.5);
-  stick(ctx, 61, 96, 34, lighten(p.green, 0.15), 0.1, 5.5);
-  leaf(ctx, 40, 30, 30, -0.4, p.green);
-  leaf(ctx, 42, 32, 26, -1.2, lighten(p.green, -0.12));
-  leaf(ctx, 64, 46, 26, 0.15, p.green);
-  leaf(ctx, 40, 72, 24, Math.PI + 0.4, p.green);
-}
-
-function spring(ctx: C, p: Palette) {
-  const pink = p === CONTRAST ? p.red : p.pink;
-  branch(ctx, [14, 30, 40, 40, 52, 66, 64, 92, 86, 104], p.brown, 3.4);
-  branch(ctx, [50, 60, 68, 52, 80, 34], p.brown, 2.2);
-  leaf(ctx, 66, 54, 16, -0.9, p.green, 0.3);
-  leaf(ctx, 40, 44, 14, 2.0, p.green, 0.3);
-  blossom(ctx, 30, 36, 10, pink, '#f6d27a');
-  blossom(ctx, 80, 32, 11, pink, '#f6d27a');
-  blossom(ctx, 56, 74, 12, pink, '#f6d27a');
-  blossom(ctx, 84, 102, 8, pink, '#f6d27a');
-}
-
 function summer(ctx: C, p: Palette) {
   const pink = p === CONTRAST ? p.red : p.pink;
   // lotus pad
@@ -537,109 +517,13 @@ function summer(ctx: C, p: Palette) {
   }
 }
 
-function mapleLeaf(ctx: C, x: number, y: number, s: number, a: number, color: string) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(a);
-  ctx.scale(s, s);
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  const pts = [0, -20, 4, -9, 13, -14, 10, -4, 20, -2, 11, 4, 14, 12, 4, 8, 1, 14, -1, 14, -4, 8, -14, 12, -11, 4, -20, -2, -10, -4, -13, -14, -4, -9];
-  ctx.moveTo(pts[0], pts[1]);
-  for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,240,220,0.5)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(0, 18);
-  ctx.lineTo(0, -16);
-  ctx.moveTo(0, 2);
-  ctx.lineTo(14, -10);
-  ctx.moveTo(0, 2);
-  ctx.lineTo(-14, -10);
-  ctx.stroke();
-  ctx.lineWidth = 1.6;
-  ctx.strokeStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, 14);
-  ctx.lineTo(0, 24);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function autumn(ctx: C, p: Palette) {
-  const orange = p === CONTRAST ? p.gold : '#d4731f';
-  mapleLeaf(ctx, 56, 44, 1.75, 0.25, p.red);
-  mapleLeaf(ctx, 34, 88, 1.35, -0.45, orange);
-  mapleLeaf(ctx, 74, 98, 0.9, 0.7, p.gold);
-}
-
-function winter(ctx: C, p: Palette) {
-  // pine branch with snow and a snowflake
-  branch(ctx, [12, 104, 40, 92, 62, 78, 78, 66, 90, 58], p.brown, 3.2);
-  for (let k = 0; k < 7; k++) {
-    const t = k / 6;
-    const x = 18 + t * 68;
-    const y = 102 - t * 42;
-    for (const a of [-1.2, -0.7, -0.2]) leaf(ctx, x, y, 13, a - Math.PI / 2 + 0.4, p.green, 0.1);
-  }
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = 'rgba(80,110,150,0.5)';
-  ctx.lineWidth = 0.8;
-  for (const [x, y, r] of [
-    [36, 90, 6],
-    [62, 74, 5],
-    [82, 62, 4],
-  ]) {
-    ctx.beginPath();
-    ctx.ellipse(x, y, r * 1.5, r * 0.8, -0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-  ctx.save();
-  ctx.translate(40, 40);
-  ctx.strokeStyle = p.blue;
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 2.6;
-  for (let k = 0; k < 6; k++) {
-    ctx.save();
-    ctx.rotate((k / 6) * Math.PI * 2);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -20);
-    ctx.moveTo(0, -11);
-    ctx.lineTo(-6, -16);
-    ctx.moveTo(0, -11);
-    ctx.lineTo(6, -16);
-    ctx.stroke();
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
-const FLOWER_CHARS = ['梅', '蘭', '菊', '竹'];
-const SEASON_CHARS = ['春', '夏', '秋', '冬'];
-
 function drawBonus(ctx: C, face: number, p: Palette) {
-  const flower = face < SEASONS;
   const n = rankOf(face);
   ctx.save();
-  // the art sits in the upper part; the name character and number below
-  ctx.translate(50, 54);
-  ctx.scale(0.94, 0.94);
+  ctx.translate(50, 67);
+  ctx.scale(1.12, 1.12);
   ctx.translate(-50, -62);
-  if (flower) [plum, orchid, chrysanthemum, bambooFlower][n - 1](ctx, p);
-  else [spring, summer, autumn, winter][n - 1](ctx, p);
-  ctx.restore();
-  const col = flower ? p.red : p.blue;
-  han(ctx, (flower ? FLOWER_CHARS : SEASON_CHARS)[n - 1], 36, 116, 24, p.ink);
-  ctx.save();
-  ctx.font = '700 22px "Lora", Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = col;
-  ctx.fillText(String(n), 70, 117);
+  [plum, orchid, chrysanthemum, summer][n - 1](ctx, p);
   ctx.restore();
 }
 
@@ -647,11 +531,12 @@ function drawBonus(ctx: C, face: number, p: Palette) {
 
 /** draw one face (art only) into the unit box FACE_W x FACE_H at the current transform */
 export function drawFaceArt(ctx: C, face: number, o: FaceOptions) {
+  if (o.set === 'garden') return drawGardenFace(ctx, face);
   const p = o.palette;
   const suit = suitOf(face);
   const n = rankOf(face);
   ctx.save();
-  if (o.indices && suit !== 'flower' && suit !== 'season') {
+  if (o.indices && suit !== 'flower') {
     // shrink the art a little toward the bottom-right to make room for the index
     ctx.translate(58, 72);
     ctx.scale(0.84, 0.84);
@@ -730,8 +615,8 @@ export function drawTileBody(ctx: C, m: TileMetrics, pad: number) {
   ctx.translate(pad, pad);
   // shadow
   ctx.save();
-  ctx.shadowColor = 'rgba(0, 18, 10, 0.5)';
-  ctx.shadowBlur = d * 2.2;
+  ctx.shadowColor = 'rgba(10, 45, 28, 0.3)';
+  ctx.shadowBlur = d * 2.6;
   ctx.shadowOffsetX = d * 0.9;
   ctx.shadowOffsetY = d * 1.2;
   ctx.fillStyle = '#123b2a';
@@ -740,27 +625,27 @@ export function drawTileBody(ctx: C, m: TileMetrics, pad: number) {
   ctx.restore();
   // jade back
   const back = ctx.createLinearGradient(0, 0, w + d, h + d);
-  back.addColorStop(0, '#2f8a62');
-  back.addColorStop(1, '#14513a');
+  back.addColorStop(0, '#47b886');
+  back.addColorStop(1, '#25875c');
   ctx.fillStyle = back;
   roundRect(ctx, d, d, w, h, r);
   ctx.fill();
   // ivory layer
-  ctx.fillStyle = '#e2d6b6';
+  ctx.fillStyle = '#efe5cb';
   roundRect(ctx, d * 0.55, d * 0.55, w, h, r);
   ctx.fill();
-  ctx.fillStyle = 'rgba(120, 95, 50, 0.25)';
+  ctx.fillStyle = 'rgba(120, 95, 50, 0.14)';
   roundRect(ctx, d * 0.55, d * 0.55, w, h, r);
   ctx.fill();
   // face
   const face = ctx.createLinearGradient(0, 0, w * 0.7, h);
-  face.addColorStop(0, '#fffdf6');
-  face.addColorStop(0.55, '#f8f1df');
-  face.addColorStop(1, '#ece0c3');
+  face.addColorStop(0, '#ffffff');
+  face.addColorStop(0.55, '#fffaee');
+  face.addColorStop(1, '#f6edd8');
   ctx.fillStyle = face;
   roundRect(ctx, 0, 0, w, h, r);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(110, 85, 40, 0.45)';
+  ctx.strokeStyle = 'rgba(110, 85, 40, 0.32)';
   ctx.lineWidth = Math.max(1, w * 0.012);
   roundRect(ctx, 0.5, 0.5, w - 1, h - 1, r);
   ctx.stroke();

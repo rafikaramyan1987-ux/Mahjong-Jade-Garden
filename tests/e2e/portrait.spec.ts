@@ -3,9 +3,9 @@ import type {} from '../shared/hooks';
 
 
 // boards from every season, including the largest (144 tiles) and the tallest stacks
-const BOARDS = [0, 4, 8, 15, 20, 31, 40, 47, 52, 58, 62, 63];
+const BOARDS = [0, 4, 8, 9, 12, 15, 20, 31, 39, 40, 47, 52, 58, 62, 63];
 
-test('portrait 390x844: tiles at least 34 px wide and the board fills the space between the bars', async ({ page }, info) => {
+test('portrait 390x844: tiles at least 48 px wide on boards 1-16 and 34 px later and the board fills the space between the bars', async ({ page }, info) => {
   test.skip(info.project.name !== 'portrait', 'portrait only');
   expect(page.viewportSize()).toEqual({ width: 390, height: 844 });
   for (const n of BOARDS) {
@@ -16,7 +16,8 @@ test('portrait 390x844: tiles at least 34 px wide and the board fills the space 
     await page.evaluate(() => window.__mjg.skipTutorial());
     const f = (await page.evaluate(() => window.__mjg.fill()))!;
     expect(await page.evaluate(() => window.__mjg.state().variant), `board ${n + 1}`).toBe('portrait');
-    expect(f.tileWidth, `board ${n + 1} tile width`).toBeGreaterThanOrEqual(34);
+    // early boards (1-16) have big tiles; later ones shrink gently, never below 34 px
+    expect(f.tileWidth, `board ${n + 1} tile width`).toBeGreaterThanOrEqual(n < 16 ? 48 : 34);
     // the board reaches (almost) the full width or the full height of the free area, and stays inside it
     const used = Math.max(f.box.w / f.area.w, f.box.h / f.area.h);
     expect(used, `board ${n + 1} fill`).toBeGreaterThan(0.86);

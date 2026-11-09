@@ -30,6 +30,10 @@ export interface SaveData {
   contrast: boolean;
   showTimer: boolean;
   tutorialDone: boolean;
+  /** one-time tips already shown */
+  tips: string[];
+  /** tile set: illustrated Garden (default) or Classic */
+  tileSet: 'garden' | 'classic';
   /** boards solved in the journey (each restores one garden element) */
   journey: number;
   /** stars per journey board index */
@@ -51,6 +55,8 @@ export function defaultSave(): SaveData {
     contrast: false,
     showTimer: true,
     tutorialDone: false,
+    tips: [],
+    tileSet: 'garden',
     journey: 0,
     stars: [],
     daily: { last: '', streak: 0, best: 0, done: [] },
@@ -70,6 +76,8 @@ export function parseSave(raw: string | null | undefined): SaveData {
       ...d,
       journey: Math.max(0, Math.floor(Number(d.journey) || 0)),
       stars: Array.isArray(d.stars) ? d.stars : [],
+      tips: Array.isArray(d.tips) ? d.tips : [],
+      tileSet: d.tileSet === 'classic' ? 'classic' : 'garden',
       daily: { ...base.daily, ...(d.daily ?? {}) },
       stats: { ...base.stats, ...(d.stats ?? {}) },
       current: d.current && typeof d.current === 'object' && d.current.game ? d.current : null,

@@ -123,7 +123,7 @@ export class BoardView {
 
   private ensureSprites() {
     const scale = this.dpr * Math.min(this.zoom, 3);
-    const key = `${this.m.w}|${scale.toFixed(2)}|${this.faceOpts.palette.red}|${this.faceOpts.indices}|${this.faceOpts.windLetters.join('')}`;
+    const key = `${this.m.w}|${scale.toFixed(2)}|${this.faceOpts.set}|${this.faceOpts.palette.red}|${this.faceOpts.indices}|${this.faceOpts.windLetters.join('')}`;
     if (key === this.spriteKey) return;
     this.spriteKey = key;
     this.sprites = new TileSprites(this.m, scale, this.faceOpts);
@@ -241,7 +241,7 @@ export class BoardView {
       sp.draw(ctx, g.faces[i], x, y);
       const free = g.isFree(i);
       if (this.highlightFree && !free) {
-        ctx.fillStyle = 'rgba(28, 46, 36, 0.36)';
+        ctx.fillStyle = 'rgba(40, 70, 55, 0.34)';
         roundRect(ctx, x, y, w, h, r);
         ctx.fill();
       }

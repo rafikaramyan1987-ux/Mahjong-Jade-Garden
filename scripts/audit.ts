@@ -19,7 +19,7 @@ import { validateLayout } from '../src/game/layout';
 import { mulberry32 } from '../src/game/rng';
 import { solve } from '../src/game/solver';
 import { boardTiles, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../src/layouts/build';
-import { BOARDS_PER_SEASON, dailyFor, dealLayout, journeyLayouts, journeySeed, type Variant } from '../src/layouts/catalog';
+import { BOARDS_PER_SEASON, dailyFor, dealLayout, journeyLayouts, journeySeed, sizeFor, type Variant } from '../src/layouts/catalog';
 
 const arg = (name: string, def: number) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -37,6 +37,7 @@ const STRICT = process.argv.includes('--strict');
 const SHUFFLES = 2;
 
 const failures: string[] = [];
+let shuffleFailures = 0;
 const fail = (m: string) => {
   failures.push(m);
   console.error('FAIL', m);
@@ -69,7 +70,11 @@ function casual(game: Game, seed: number) {
     const moves = g.openMatches();
     if (!moves.length) {
       shuffles++;
-      if (shuffles > 12 || !g.shuffle(rng)) break;
+      if (shuffles > 12) break;
+      if (!g.shuffle(rng)) {
+        shuffleFailures++;
+        break;
+      }
       continue;
     }
     const [a, b] = moves[Math.floor(rng() * moves.length)];
@@ -105,7 +110,8 @@ for (const l of journeyLayouts()) {
     if (slots.length > 144) fail(`${label}: ${slots.length} tiles (more than one set)`);
     const b = boardTiles(slots);
     const tw = variant === 'portrait' ? tileWidthIn(b, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h) : 0;
-    if (variant === 'portrait' && tw < MIN_PORTRAIT_TILE) fail(`${label}: tiles ${tw.toFixed(1)} px wide on a 390 px phone`);
+    const minTile = Math.max(MIN_PORTRAIT_TILE, sizeFor(l.index).minTile);
+    if (variant === 'portrait' && tw < minTile) fail(`${label}: tiles ${tw.toFixed(1)} px wide on a 390 px phone (minimum ${minTile})`);
     const game = dealLayout(l, variant, journeySeed(l.index));
     const st = verify(game, label);
     let openSum = game.openMatches().length;
@@ -152,11 +158,14 @@ for (let d = 0; d < DAYS; d++) {
   for (const variant of ['landscape', 'portrait'] as Variant[]) verify(dealLayout(layout, variant, seed), `daily ${key} ${variant}`);
 }
 
+if (shuffleFailures) fail(`${shuffleFailures} shuffles could not produce a solvable position`);
+
 // difficulty trend: average open matches at the start per season should go down, tiles and layers up
 const seasons = [0, 1, 2, 3].map((s) => {
   const rs = rows.filter((r) => Math.floor((r.n - 1) / BOARDS_PER_SEASON) === s);
   const avg = (f: (r: Row) => number) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
-  return { season: s + 1, tiles: avg((r) => r.tiles), layers: avg((r) => r.layers), open: avg((r) => r.openAvg), clean: avg((r) => r.cleanWin), within: avg((r) => r.withinShuffles) };
+  const portrait = rs.filter((r) => r.variant === 'portrait').map((r) => r.tile);
+  return { season: s + 1, tiles: avg((r) => r.tiles), layers: avg((r) => r.layers), open: avg((r) => r.openAvg), clean: avg((r) => r.cleanWin), within: avg((r) => r.withinShuffles), minTile: Math.min(...portrait), maxTile: Math.max(...portrait) };
 });
 for (let s = 1; s < 4; s++) {
   if (seasons[s].tiles < seasons[s - 1].tiles) fail(`season ${s + 1} has fewer tiles on average than season ${s}`);
@@ -174,14 +183,16 @@ const md = [
   `- ${rows.length} journey boards (64 layouts x landscape / portrait), each verified on the journey deal and ${SEEDS} more seeds: ${rows.length * (SEEDS + 1)} deals.`,
   `- ${DAYS * 2} daily challenge deals (next ${DAYS} days, both variants).`,
   '- Every deal is proven solvable twice: its construction order replays to an empty board, and the independent solver finds a solution.',
-  `- Smallest portrait tile on a 390 x 844 phone: ${minTile.toFixed(1)} px (minimum ${MIN_PORTRAIT_TILE}).`,
+  `- Smallest portrait tile on a 390 x 844 phone: ${minTile.toFixed(1)} px (required: ≥ 48 px on boards 1–16, then 44 / 40 / 36 px per season, never below ${MIN_PORTRAIT_TILE}).`,
+  '- Only identical pictures match (38 pictures: 34 x 4 tiles + 4 x 2 tiles).',
+  `- Shuffle (solver-verified, also from dead ends) never failed in ${rows.length * BOTS} bot games.`,
   `- Failures: ${failures.length}`,
   '',
   '## Seasons',
   '',
-  '| Season | avg tiles | avg layers | avg open matches at start | casual bot clears without help | casual bot clears with ≤ 2 shuffles |',
-  '|---|---|---|---|---|---|',
-  ...seasons.map((s) => `| ${s.season} | ${s.tiles.toFixed(0)} | ${s.layers.toFixed(1)} | ${s.open.toFixed(1)} | ${pct(s.clean)} | ${pct(s.within)} |`),
+  '| Season | avg tiles | avg layers | portrait tile px on 390 x 844 (min–max) | avg open matches at start | casual bot clears without help | casual bot clears with ≤ 2 shuffles |',
+  '|---|---|---|---|---|---|---|',
+  ...seasons.map((s) => `| ${s.season} | ${s.tiles.toFixed(0)} | ${s.layers.toFixed(1)} | ${s.minTile.toFixed(0)}–${s.maxTile.toFixed(0)} | ${s.open.toFixed(1)} | ${pct(s.clean)} | ${pct(s.within)} |`),
   '',
   'The casual bot plays a random open match every move (no planning), a pessimistic model of a new player.',
   'Players who think ahead, or use Hint (the solver picks a move that keeps the board solvable), do much better.',

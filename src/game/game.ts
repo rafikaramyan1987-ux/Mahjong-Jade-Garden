@@ -4,7 +4,7 @@ import { mulberry32, type Rng } from './rng';
 import { openMatches, solve, type Move } from './solver';
 import { faceMatches, fullPairs } from './tiles';
 
-export type HistoryEntry = { kind: 'match'; a: number; b: number } | { kind: 'shuffle'; faces: number[] };
+export type HistoryEntry = { kind: 'match'; a: number; b: number } | { kind: 'shuffle'; faces: number[]; present?: boolean[] };
 
 export interface GameSnapshot {
   slots: Slot[];
@@ -145,7 +145,10 @@ export class Game {
     const h = this.history.pop();
     if (!h) return null;
     if (h.kind === 'match') this.present[h.a] = this.present[h.b] = true;
-    else this.faces = h.faces.slice();
+    else {
+      this.faces = h.faces.slice();
+      if (h.present) this.present = h.present.slice();
+    }
     return h;
   }
 
@@ -153,18 +156,50 @@ export class Game {
   shuffle(rng: Rng): boolean {
     const pairs = pairsOf(this.faces, this.present);
     if (!pairs.length) return false;
-    for (let s = 0; s < 10; s++) {
-      const d = dealPairs(this.g, this.present, pairs, rng);
+    // 1. re-deal the same tiles onto the same places by reverse construction (provably solvable), confirmed by the
+    //    solver
+    let fallback: number[] | null = null;
+    for (let s = 0; s < 12; s++) {
+      const d = dealPairs(this.g, this.present, pairs, rng, 60);
+      if (!d) break; // these places admit no solution at all (e.g. the last tiles lie on each other)
+      const faces = this.faces.map((f, i) => (this.present[i] ? d.faces[i] : f));
+      const r = solve(this.g, faces, this.present, 40000, s + 1);
+      if (r.solvable === true) return this.applyShuffle(faces, this.present);
+      if (r.solvable === null && !fallback) fallback = faces;
+    }
+    if (fallback) return this.applyShuffle(fallback, this.present);
+    // 2. the places themselves are a dead end: move the tiles to places that can be cleared. Any state reached
+    //    while clearing the full layout is solvable; take the one that keeps most tiles where they are.
+    const n = this.remaining;
+    const all = this.present.map(() => true);
+    let best: boolean[] | null = null;
+    let bestKeep = -1;
+    for (let s = 0; s < 40; s++) {
+      const d = dealPairs(this.g, all, Array.from({ length: all.length / 2 }, () => [0, 0] as [number, number]), rng, 20);
       if (!d) continue;
-      // avoid a shuffle that looks like nothing happened
-      const before = this.faces.slice();
-      this.history.push({ kind: 'shuffle', faces: before });
-      this.present.forEach((p, i) => {
-        if (p) this.faces[i] = d.faces[i];
-      });
-      return true;
+      const places = all.slice();
+      for (const [a, b] of d.solution.slice(0, (all.length - n) / 2)) places[a] = places[b] = false;
+      const keep = places.reduce((k, p, i) => k + (p && this.present[i] ? 1 : 0), 0);
+      if (keep > bestKeep) {
+        best = places;
+        bestKeep = keep;
+      }
+    }
+    if (!best) return false;
+    for (let s = 0; s < 12; s++) {
+      const d = dealPairs(this.g, best, pairs, rng, 60);
+      if (!d) continue;
+      const faces = this.faces.map((f, i) => (best![i] ? d.faces[i] : f));
+      if (solve(this.g, faces, best, 40000, s + 1).solvable !== false) return this.applyShuffle(faces, best);
     }
     return false;
+  }
+
+  private applyShuffle(faces: number[], present: boolean[]) {
+    this.history.push({ kind: 'shuffle', faces: this.faces.slice(), present: this.present.slice() });
+    this.faces = faces;
+    this.present = present.slice();
+    return true;
   }
 
   /** A good next match: one after which the board is still solvable (solver-checked), else any open match. */

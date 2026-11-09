@@ -56,7 +56,8 @@ await shot(await page(1920, 1080, 1, 'shot=cover'), 'cover-1920x1080.png');
 }
 // 3. the full tile set
 await shot(await page(1920, 1080, 1, 'shot=tiles'), 'tile-set-1920x1080.png');
-await shot(await page(1920, 1080, 1, 'shot=tiles-contrast'), 'tile-set-colorblind-1920x1080.png');
+await shot(await page(1920, 1080, 1, 'shot=tiles-classic'), 'tile-set-classic-1920x1080.png');
+await shot(await page(1920, 1080, 1, 'shot=tiles-contrast'), 'tile-set-classic-colorblind-1920x1080.png');
 // 4. the garden journey (spring, 9 of 16 restored) and a later season
 for (const [journey, name] of [
   [9, 'garden-journey-spring-1920x1080.png'],

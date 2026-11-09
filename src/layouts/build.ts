@@ -83,6 +83,8 @@ export interface FitOptions {
   layers: number;
   stack: Stack;
   portrait: boolean;
+  /** smallest tile face width allowed for the portrait variant on a 390 x 844 phone */
+  minTile?: number;
 }
 
 /**
@@ -97,10 +99,10 @@ export function fitShape(mask: Mask, o: FitOptions): Slot[] {
     for (let rows = rowsRange[0]; rows <= rowsRange[1]; rows++) {
       const slots = buildStack(mask, cols, rows, o.layers, o.stack);
       const n = slots.length;
-      if (n < 40 || n > 144) continue;
+      if (n < 24 || n > 144) continue;
       const b = boardTiles(slots);
       const tw = o.portrait ? tileWidthIn(b, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h) : tileWidthIn(b, DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h);
-      if (o.portrait && tw < MIN_PORTRAIT_TILE + 2) continue;
+      if (o.portrait && tw < Math.max(MIN_PORTRAIT_TILE, o.minTile ?? 0) + 0.5) continue;
       const layersUsed = b.maxZ + 1;
       // closest count, then the layer count asked for, then bigger tiles
       const score = Math.abs(n - o.target) * 10 + Math.abs(layersUsed - o.layers) * 25 - tw * 0.5;

@@ -55,33 +55,55 @@ export const SHAPES: Shape[] = [
   { family: 'maple', mask: (u, v) => Math.abs(u - 0.5) + Math.abs(v - 0.5) <= 0.58, stack: 'aligned' },
   { family: 'lotus', mask: (u, v) => Math.abs(u - 0.5) <= 0.2 || Math.abs(v - 0.5) <= 0.2 || ell(u, v, 0.3, 0.3) <= 1, stack: 'mixed' },
   { family: 'cranes', mask: (u, v, a) => (a >= 1 ? Math.abs(v - (0.15 + Math.abs(u - 0.5) * 1.4)) <= 0.36 : Math.abs(u - (0.15 + Math.abs(v - 0.5) * 1.4)) <= 0.36), stack: 'offset' },
-  { family: 'turtle', mask: () => true, stack: 'offset' },
+  {
+    family: 'turtle',
+    // shell, head and tail (head toward the top on tall boards, to the left on wide ones)
+    mask: (u, v, a) => {
+      const [x, y] = a >= 1 ? [u, v] : [v, u];
+      return ell(x, y, 0.5, 0.42) <= 1.02 || (Math.abs(y - 0.5) < 0.09 && (x < 0.08 || x > 0.92));
+    },
+    stack: 'aligned',
+  },
 ];
 
 export const BOARDS_PER_SEASON = SHAPES.length;
 export const JOURNEY_LENGTH = BOARDS_PER_SEASON * 4;
 
-/** tile count and stack height for journey position n */
+/**
+ * Tile count, stack height and the smallest portrait tile for journey position n. Early boards are small so the
+ * tiles are big on a phone (>= 48 px wide on a 390 px screen in spring); boards grow and tiles shrink gently,
+ * season by season, never below 36 px.
+ */
 export function sizeFor(n: number) {
   const season = Math.floor(n / BOARDS_PER_SEASON);
   const k = (n % BOARDS_PER_SEASON) / (BOARDS_PER_SEASON - 1);
-  const target = Math.round(64 + season * 18 + k * 26); // 64 .. 144
-  const layers = 3 + season + (k > 0.5 ? 1 : 0); // 3 .. 7
-  return { target: Math.min(144, target), layers: Math.min(7, layers) };
+  const ranges: [number, number][] = [
+    [36, 64],
+    [64, 96],
+    [92, 124],
+    [120, 144],
+  ];
+  const [lo, hi] = ranges[Math.min(3, season)];
+  const target = Math.round(lo + (hi - lo) * k);
+  const layers = 2 + season + (k > 0.5 ? 1 : 0); // 2 .. 6
+  const minTile = [48, 44, 40, 36][Math.min(3, season)];
+  return { target: Math.min(144, target - (target % 2)), layers: Math.min(6, layers), minTile };
 }
 
 function make(n: number): BoardLayout {
   const shape = SHAPES[n % SHAPES.length];
   const hardness = Math.min(1, n / (JOURNEY_LENGTH - 1));
-  const id = `${shape.family}-${Math.floor(n / BOARDS_PER_SEASON) + 1}`;
-  if (shape.family === 'turtle') return { id, index: n, family: shape.family, landscape: JADE_TURTLE_LANDSCAPE, portrait: JADE_TURTLE_PORTRAIT, hardness };
-  const { target, layers } = sizeFor(n);
+  const season = Math.floor(n / BOARDS_PER_SEASON);
+  const id = `${shape.family}-${season + 1}`;
+  // the full 144-tile Jade Turtle closes autumn and winter; spring and summer end on a smaller turtle
+  if (shape.family === 'turtle' && season >= 2) return { id, index: n, family: shape.family, landscape: JADE_TURTLE_LANDSCAPE, portrait: JADE_TURTLE_PORTRAIT, hardness };
+  const { target, layers, minTile } = sizeFor(n);
   return {
     id,
     index: n,
     family: shape.family,
     landscape: fitShape(shape.mask, { target, layers, stack: shape.stack, portrait: false }),
-    portrait: fitShape(shape.mask, { target, layers, stack: shape.stack, portrait: true }),
+    portrait: fitShape(shape.mask, { target, layers, stack: shape.stack, portrait: true, minTile }),
     hardness,
   };
 }
