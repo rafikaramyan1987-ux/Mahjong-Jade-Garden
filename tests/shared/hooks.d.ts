@@ -13,6 +13,7 @@ export interface MjgState {
   hintsLeft: number | null;
   shufflesLeft: number | null;
   adPaused: boolean;
+  undosLeft?: number;
 }
 export interface MjgRect {
   x: number;
@@ -31,6 +32,9 @@ declare global {
       setJourney(n: number): void;
       skipTutorial(): void;
       stuck(): void;
+      demoProgress(n: number): void;
+      showJourney(): void;
+      setTime(secs: number): void;
     };
   }
 }

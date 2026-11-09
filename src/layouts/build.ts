@@ -94,6 +94,37 @@ export const MIN_LANDSCAPE_TILE = 64;
 /** portrait boards are at most this many tiles across (depth comes from layers, not columns) */
 export const MAX_PORTRAIT_COLS = 6;
 
+/**
+ * How "full" a board looks from above: the share of its bounding box covered by tiles (any layer), and whether a
+ * whole row or column inside it is empty (a visible split). Used to keep portrait boards balanced.
+ */
+export function footprint(slots: Slot[]) {
+  const b = boardTiles(slots);
+  const W = b.maxX - b.minX;
+  const H = b.maxY - b.minY;
+  const cov = new Uint8Array(W * H);
+  for (const [x, y] of slots)
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) cov[(y - b.minY + dy) * W + (x - b.minX + dx)] = 1;
+  let n = 0;
+  for (const c of cov) n += c;
+  let emptyRows = 0;
+  let emptyCols = 0;
+  for (let y = 1; y < H - 1; y++) {
+    let any = 0;
+    for (let x = 0; x < W; x++) any |= cov[y * W + x];
+    if (!any) emptyRows++;
+  }
+  for (let x = 1; x < W - 1; x++) {
+    let any = 0;
+    for (let y = 0; y < H; y++) any |= cov[y * W + x];
+    if (!any) emptyCols++;
+  }
+  return { fill: n / (W * H), split: emptyRows + emptyCols > 0 };
+}
+
+/** portrait boards must look full: at least this share of the bounding box covered, and no split */
+export const MIN_PORTRAIT_FILL = 0.7;
+
 export interface FitOptions {
   target: number;
   layers: number;
@@ -123,13 +154,15 @@ export function fitShape(mask: Mask, o: FitOptions): Slot[] {
           if (o.portrait && (b.maxX - b.minX) / 2 > MAX_PORTRAIT_COLS) continue;
           const tw = tileWidthIn(b, area.w, area.h);
           if (tw < minTile + 0.5) continue;
+          const fp = footprint(slots);
+          if (o.portrait && (fp.split || fp.fill < MIN_PORTRAIT_FILL)) continue;
           const used = b.maxZ + 1;
           // how much of the free area the board covers in its tighter direction (1 = fills width and height)
           const bwPx = ((b.maxX - b.minX) / 2 + TILE_DEPTH + b.maxZ * LAYER_SHIFT) * tw;
           const bhPx = (((b.maxY - b.minY) / 2) * TILE_ASPECT + TILE_DEPTH + b.maxZ * LAYER_SHIFT) * tw;
           const fill = Math.min(bwPx / area.w, bhPx / area.h);
           // closest count, then the layer count asked for, then a board that fills the screen, then pyramids
-          const score = Math.abs(n - o.target) * 6 + Math.abs(used - o.layers) * 14 + (1 - fill) * 90 + (every - 1) * 3;
+          const score = Math.abs(n - o.target) * 6 + Math.abs(used - o.layers) * 14 + (1 - fill) * 90 + (1 - fp.fill) * 40 + (fp.split ? 60 : 0) + (every - 1) * 3;
           if (!best || score < best.score) best = { slots, score };
         }
   if (!best) throw new Error('no grid size fits this shape');

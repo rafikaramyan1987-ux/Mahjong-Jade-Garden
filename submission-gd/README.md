@@ -36,8 +36,11 @@ to zoom.
 - Big tiles everywhere: the board fills the screen and tiles stay large on every board; harder boards stack
   more layers instead of shrinking the tiles
 - Jade Garden journey: restore 16 garden elements in each of the 4 seasons
-- Daily challenge, statistics and star ratings by time and hints
-- Hint, Undo and Shuffle; optional rewarded ad for an extra hint or shuffle
+- Journey screen: replay any finished board to improve your stars and best time
+- Daily challenge (the same board for everyone each day) with bronze / silver / gold medals, a personal best and a
+  day streak; statistics and star ratings by time and hints
+- Hint, Undo and Shuffle; optional rewarded ads for one more of each, and a rewarded Continue when stuck; no coins,
+  no shop
 - Accessibility: large high-contrast tiles, free tiles highlighted, colorblind-friendly suits, zoom, no time limit
 - Light, warm music (two original pentatonic tracks with flute, guzheng and pipa) and satisfying match chimes;
   separate music and sound switches; English and French
@@ -53,7 +56,8 @@ logic, chinese, garden, daily challenge, mobile, html5
 - Single `index.html`, no external requests except the GameDistribution SDK (`main.min.js`, loaded once at start)
 - `SDK_GAME_PAUSE` pauses the game and mutes all audio; `SDK_GAME_START` resumes and restores the audio settings
 - Interstitials only after a user action outside play: Play (pre-roll) and Next / Menu between boards, never before
-  the 3rd board is cleared. Rewarded ads only for an optional extra hint or shuffle; the reward is granted on
+  the 3rd board is cleared. Interstitials are rate-limited to one per ~2 minutes.
+  Rewarded ads only for an optional extra hint, shuffle or undo, or a Continue when stuck; the reward is granted on
   `SDK_REWARDED_WATCH_COMPLETE`
 - Every ad request settles exactly once (completion, error / cancel, or nothing started within 8 s); when no ad is
   available the button shows "No ad available right now, try later" for 2.5 s

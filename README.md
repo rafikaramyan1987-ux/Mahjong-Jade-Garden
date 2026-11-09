@@ -37,10 +37,16 @@ player is stuck, a gentle tip explains Shuffle and Undo.
   bigger tiles on the current screen, and the board fills the screen (8 px side margins). Tiles are at least
   56 px wide on a 390 x 844 phone and 64 px on 1280 x 720 on every board (audit, unit and e2e checks).
 - **Jade Garden**: each cleared journey board restores one of 16 garden elements; one season per 16 boards.
-- **Daily challenge**: one deal per date (a mid-journey layout), with a streak.
-- **Statistics**: journey progress, boards played / cleared, win rate, best and average time, best score, tiles
-  matched, stars, daily streak. Stars: 3 = no hint and fast, 2 = up to 2 hints or a steady pace, 1 = cleared.
-- **Help per board**: 3 hints, 2 shuffles, unlimited undo; one more hint or shuffle for an optional rewarded ad.
+- **Journey screen** (board select, from the main menu and the result screen): all 64 boards by season, with
+  stars and best time on finished boards, the next board highlighted and later boards locked. Any finished board
+  can be replayed (same deal); replays only improve the best stars / time. Continue always opens the next board.
+- **Daily challenge**: the same board for everyone each day (seeded by the date, no server), a personal best time,
+  bronze / silver / gold medals by time (gold ≤ 3 s per tile, silver ≤ 5 s), a streak ("5 days in a row") with a
+  gentle reminder on the main menu.
+- **Statistics**: boards finished, total stars, best daily time, current and longest daily streak, boards played /
+  cleared, win rate, best and average time, best score, tiles matched. Stars: 3 = no hint and fast, 2 = up to 2 hints or a steady pace, 1 = cleared.
+- **Help per board**: 3 hints, 2 shuffles, 5 undos. When one runs out its button offers "Watch an ad: +1"; when no
+  pairs are left and no shuffle remains, a rewarded "Continue" shuffles the tiles into a solvable position.
   The playtest bot (a player who takes a random open match every move) clears 99–100% of boards with at most
   2 shuffles, so the free allowance is enough; see [docs/audit.md](docs/audit.md).
 
@@ -85,7 +91,8 @@ node scripts/record.mjs # gameplay recordings -> docs/media
   the game loads. `SDK_GAME_PAUSE` pauses and mutes, `SDK_GAME_START` resumes and restores the audio settings,
   `SDK_REWARDED_WATCH_COMPLETE` grants the reward. Interstitials only on user input outside play (Play = pre-roll,
   Next / Menu between boards, never before the 3rd board); rewarded ads only for an optional extra hint or
-  shuffle. Every ad request settles exactly once (completion, error / cancel, or nothing started within 8 s).
+  shuffle / undo, or a rewarded Continue when stuck. Mid-roll interstitials are rate-limited to one per ~2 minutes
+  (the pre-roll counts). No coins, no shop: monetization is ads only. Every ad request settles exactly once (completion, error / cancel, or nothing started within 8 s).
   If the SDK cannot load, the game stays fully playable. The game id is a build constant:
   `GD_GAME_ID=<id> npm run build:gd` (placeholder `TODO_GD_GAME_ID`).
 

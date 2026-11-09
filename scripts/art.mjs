@@ -81,5 +81,53 @@ await shot(await page(540, 960, 2, '', true), 'title-portrait-1080x1920.png');
   await p.waitForTimeout(2600);
   await shot(p, 'board-cleared-1920x1080.png');
 }
+// 6. journey (board select), daily challenge result with a medal (phone portrait, 2x)
+for (const [w, h, dpr, touch, name] of [
+  [390, 844, 2, true, 'journey-portrait-390x844.png'],
+  [1280, 720, 1.5, false, 'journey-landscape-1920x1080.png'],
+]) {
+  const p = await page(w, h, dpr, '', touch);
+  await p.evaluate(() => window.__mjg.demoProgress(21));
+  await p.evaluate(() => window.__mjg.showJourney());
+  await p.waitForTimeout(600);
+  await shot(p, name);
+}
+{
+  const p = await page(390, 844, 2, '', true);
+  await p.evaluate(() => window.__mjg.demoProgress(21));
+  await p.click('[data-testid=daily]');
+  await p.evaluate(() => window.__mjg.skipTutorial());
+  await p.evaluate(() => window.__mjg.setTime(267));
+  await p.evaluate(() => window.__mjg.solve());
+  await p.waitForSelector('[data-testid=win]');
+  await p.waitForTimeout(1500);
+  await shot(p, 'daily-medal-390x844.png');
+}
 await browser.close();
 close();
+
+// 7. the rewarded "+1 Hint" offer as it looks in the GameDistribution build (mocked SDK, run `npm run build:gd`)
+{
+  const gd = await serve(4185, 'gd');
+  const b2 = await chromium.launch();
+  const p = await b2.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+  await p.route('https://html5.api.gamedistribution.com/main.min.js', (r) =>
+    r.fulfill({ contentType: 'application/javascript', body: 'window.gdsdk={showAd(){return new Promise(()=>{})}}' }),
+  );
+  await p.goto(gd.url + '?fresh');
+  await p.waitForSelector('body[data-ready="1"]');
+  await p.evaluate(() => window.__mjg.setJourney(9));
+  await p.click('[data-testid=play]');
+  await p.waitForTimeout(400);
+  await p.evaluate(() => window.__mjg.skipTutorial());
+  for (let i = 0; i < 3; i++) await p.click('[data-testid=hint]');
+  await p.waitForTimeout(3400);
+  await p.screenshot({ path: `${out}/rewarded-hint-button-390x844.png` });
+  console.log('wrote', `${out}/rewarded-hint-button-390x844.png`);
+  await p.click('[data-testid=hint]');
+  await p.waitForTimeout(400);
+  await p.screenshot({ path: `${out}/rewarded-hint-offer-390x844.png` });
+  console.log('wrote', `${out}/rewarded-hint-offer-390x844.png`);
+  await b2.close();
+  gd.close();
+}

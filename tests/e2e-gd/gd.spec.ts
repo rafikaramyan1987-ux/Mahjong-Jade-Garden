@@ -48,7 +48,8 @@ test('GD_OPTIONS uses the build game id and the SDK script is loaded once', asyn
   expect(info.n).toBe(1);
 });
 
-test('pre-roll on Play (once), no interstitial between boards before the 3rd board', async ({ page }) => {
+test('pre-roll on Play (once), no interstitial before the 3rd board, then at most one per 2 minutes', async ({ page }) => {
+  await page.clock.install();
   const errors = await boot(page);
   await page.click('[data-testid=play]');
   await expect.poll(() => ads(page)).toEqual(['interstitial']);
@@ -63,12 +64,23 @@ test('pre-roll on Play (once), no interstitial between boards before the 3rd boa
     await page.waitForTimeout(600);
     expect(await ads(page)).toEqual(['interstitial']);
   }
-  // board 3 cleared: Next shows an interstitial, the game pauses during the ad and continues after it
+  // board 3 cleared, but less than 2 minutes since the pre-roll: no ad yet
+  await page.evaluate(() => window.__mjg.solve());
+  await page.click('[data-testid=next]');
+  await page.waitForTimeout(600);
+  expect(await ads(page)).toEqual(['interstitial']);
+  // board 4 cleared more than 2 minutes later: Next shows an interstitial, the game pauses and continues after it
+  await page.clock.fastForward(125_000);
   await page.evaluate(() => window.__mjg.solve());
   await page.click('[data-testid=next]');
   await expect.poll(() => ads(page)).toEqual(['interstitial', 'interstitial']);
   await expect.poll(() => state(page).then((s) => s.adPaused)).toBe(false);
   await expect.poll(() => state(page).then((s) => s.remaining)).toBeGreaterThan(16);
+  // right after that ad: the next board change shows none (rate limit)
+  await page.evaluate(() => window.__mjg.solve());
+  await page.click('[data-testid=next]');
+  await page.waitForTimeout(600);
+  expect(await ads(page)).toEqual(['interstitial', 'interstitial']);
   // Menu then Play again: no second pre-roll
   await page.click('[data-testid=menu]');
   await page.click('[data-testid=to-menu]');
@@ -140,4 +152,41 @@ test('the game stays fully playable when the SDK cannot load', async ({ page }) 
   await page.click('[data-testid=next]');
   await expect.poll(() => state(page).then((s) => s.journey)).toBe(1);
   expect(errors).toEqual([]);
+});
+
+test('rewarded extras: "Watch an ad: +1" for Hint, Undo and a rewarded Continue when stuck', async ({ page }) => {
+  await boot(page);
+  await page.click('[data-testid=play]');
+  await page.evaluate(() => window.__mjg.skipTutorial());
+  // hints run out -> the hint button offers a rewarded +1
+  for (let i = 0; i < 3; i++) await page.click('[data-testid=hint]');
+  await expect(page.locator('[data-testid=hint] .badge')).toHaveText('+1');
+  await page.click('[data-testid=hint]');
+  await expect(page.locator('[data-testid=reward]')).toHaveText(/Watch an ad: \+1 Hint/);
+  await page.click('[data-testid=reward]');
+  await expect.poll(() => ads(page).then((a) => a.at(-1))).toBe('rewarded');
+  await expect(page.locator('[data-testid=reward]')).toHaveCount(0);
+  // undos run out -> rewarded +1 Undo
+  for (let k = 0; k < 6; k++) {
+    const pr = (await page.evaluate(() => window.__mjg.pair()))!;
+    for (const [x, y] of pr) {
+      if (page.viewportSize()!.width < 600) await page.touchscreen.tap(x, y);
+      else await page.mouse.click(x, y);
+    }
+  }
+  for (let i = 0; i < 5; i++) await page.click('[data-testid=undo]');
+  expect((await state(page)).undosLeft).toBe(0);
+  await page.click('[data-testid=undo]');
+  await expect(page.locator('[data-testid=reward]')).toHaveText(/Watch an ad: \+1 Undo/);
+  const before = (await state(page)).remaining!;
+  await page.click('[data-testid=reward]');
+  await expect.poll(() => state(page).then((s) => s.remaining)).toBe(before + 2);
+  // no shuffles left and stuck -> rewarded Continue
+  await page.click('[data-testid=shuffle]');
+  await page.click('[data-testid=shuffle]');
+  await page.evaluate(() => window.__mjg.stuck());
+  await expect(page.locator('[data-testid=reward-continue]')).toHaveText(/Watch an ad: Continue/);
+  await page.click('[data-testid=reward-continue]');
+  await expect(page.locator('[data-testid=stuck]')).toHaveCount(0);
+  expect((await state(page)).matches).toBeGreaterThan(0);
 });

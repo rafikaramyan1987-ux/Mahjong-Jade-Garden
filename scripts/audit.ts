@@ -18,7 +18,7 @@ import { Game } from '../src/game/game';
 import { validateLayout } from '../src/game/layout';
 import { mulberry32 } from '../src/game/rng';
 import { solve } from '../src/game/solver';
-import { boardTiles, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../src/layouts/build';
+import { boardTiles, footprint, MIN_PORTRAIT_FILL, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../src/layouts/build';
 import { BOARDS_PER_SEASON, dailyFor, dealLayout, journeyLayouts, journeySeed, type Variant } from '../src/layouts/catalog';
 
 const arg = (name: string, def: number) => {
@@ -113,6 +113,8 @@ for (const l of journeyLayouts()) {
     const tw = portrait ? tileWidthIn(b, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h) : tileWidthIn(b, DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h);
     const minTile = portrait ? MIN_PORTRAIT_TILE : MIN_LANDSCAPE_TILE;
     if (tw < minTile) fail(`${label}: tiles ${tw.toFixed(1)} px wide (minimum ${minTile} px ${portrait ? 'on 390 x 844' : 'on 1280 x 720'})`);
+    const fp = footprint(slots);
+    if (portrait && (fp.split || fp.fill < MIN_PORTRAIT_FILL)) fail(`${label}: looks gappy (covers ${Math.round(fp.fill * 100)}% of its outline${fp.split ? ', split by an empty row or column' : ''})`);
     if (portrait && (b.maxX - b.minX) / 2 > MAX_PORTRAIT_COLS) fail(`${label}: ${(b.maxX - b.minX) / 2} tiles across (maximum ${MAX_PORTRAIT_COLS})`);
     const game = dealLayout(l, variant, journeySeed(l.index));
     const st = verify(game, label);
@@ -187,6 +189,7 @@ const md = [
   `- ${DAYS * 2} daily challenge deals (next ${DAYS} days, both variants).`,
   '- Every deal is proven solvable twice: its construction order replays to an empty board, and the independent solver finds a solution.',
   `- Smallest tile on a 390 x 844 phone (portrait): ${minTile.toFixed(1)} px (required ≥ ${MIN_PORTRAIT_TILE} px on every board, at most ${MAX_PORTRAIT_COLS} tiles across); on 1280 x 720 (landscape): ${minLand.toFixed(1)} px (required ≥ ${MIN_LANDSCAPE_TILE} px).`,
+  `- Portrait boards look full: each covers ≥ ${Math.round(MIN_PORTRAIT_FILL * 100)}% of its outline, with no empty row or column splitting it.`,
   '- Only identical pictures match (38 pictures: 34 x 4 tiles + 4 x 2 tiles).',
   `- Shuffle (solver-verified, also from dead ends) never failed in ${rows.length * BOTS} bot games.`,
   `- Failures: ${failures.length}`,
