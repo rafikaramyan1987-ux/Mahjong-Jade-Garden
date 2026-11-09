@@ -46,7 +46,15 @@ export const SHAPES: Shape[] = [
   },
   { family: 'koi', mask: (u, v, a) => (a >= 1 ? ell(u, v, 0.27, 0.5) <= 1.05 || ell(u - 0.48, v, 0.27, 0.5) <= 1.05 || ell(u + 0.48, v, 0.27, 0.5) <= 1.05 : ell(u, v - 0.24, 0.5, 0.27) <= 1.05 || ell(u, v + 0.24, 0.5, 0.27) <= 1.05), stack: 'mixed' },
   { family: 'pagoda', mask: (u, v) => Math.abs(u - 0.5) <= 0.18 + 0.32 * (Math.floor(v * 4) / 3), stack: 'aligned' },
-  { family: 'bamboo', mask: (u, v, a) => (a >= 1 ? Math.floor(u * 9) % 3 !== 2 : Math.floor(v * 9) % 3 !== 2), stack: 'offset' },
+  // bamboo grove: stalks with staggered notches (small openings, never a full empty row or column)
+  {
+    family: 'bamboo',
+    mask: (u, v, a) => {
+      const [along, across] = a >= 1 ? [v, u] : [u, v];
+      return !(Math.floor(across * 9) % 3 === 2 && Math.floor(along * 6) % 2 === 1);
+    },
+    stack: 'offset',
+  },
   { family: 'gate', mask: (u, v) => ell(u, v, 0.55, 0.55) <= 1 && ell(u, v, 0.26, 0.26) > 1, stack: 'offset' },
   { family: 'fan', mask: (u, v) => Math.hypot(u - 0.5, (v - 1) * 0.9) <= 0.9 && Math.abs(Math.atan2(u - 0.5, 1 - v)) <= 1.0, stack: 'offset' },
   { family: 'pavilion', mask: (u, v) => (v < 0.45 ? Math.abs(u - 0.5) <= 0.12 + v * 0.95 : Math.abs(u - 0.5) <= 0.4), stack: 'mixed' },

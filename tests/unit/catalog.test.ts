@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { starsFor } from '../../src/app/app';
+import { MIDGAME_GAP, UNDOS_PER_BOARD, medalFor, starsFor } from '../../src/app/app';
 import { STRINGS } from '../../src/app/i18n';
 import { parseSave } from '../../src/app/save';
 import { ELEMENTS_PER_SEASON } from '../../src/art/garden';
 import { validateLayout } from '../../src/game/layout';
-import { boardTiles, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../../src/layouts/build';
+import { boardTiles, footprint, MIN_PORTRAIT_FILL, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../../src/layouts/build';
 import { BOARDS_PER_SEASON, JOURNEY_LENGTH, dailyFor, journeyLayouts, layoutAt } from '../../src/layouts/catalog';
 
 describe('journey catalog', () => {
@@ -27,6 +27,9 @@ describe('journey catalog', () => {
       const bp = boardTiles(l.portrait);
       expect(tileWidthIn(bp, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h), l.id).toBeGreaterThanOrEqual(MIN_PORTRAIT_TILE);
       expect((bp.maxX - bp.minX) / 2, l.id).toBeLessThanOrEqual(MAX_PORTRAIT_COLS);
+      const fp = footprint(l.portrait);
+      expect(fp.split, `${l.id} split`).toBe(false);
+      expect(fp.fill, `${l.id} fill`).toBeGreaterThanOrEqual(MIN_PORTRAIT_FILL);
       expect(tileWidthIn(boardTiles(l.landscape), DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h), l.id).toBeGreaterThanOrEqual(MIN_LANDSCAPE_TILE);
     }
   });
@@ -52,6 +55,20 @@ describe('scoring and saves', () => {
     expect(starsFor(144, 400, 0)).toBe(3);
     expect(starsFor(144, 900, 1)).toBe(2);
     expect(starsFor(144, 2000, 5)).toBe(1);
+  });
+  it('daily medals by time; ad gap and undo allowance', () => {
+    expect(medalFor(100, 250)).toBe('gold');
+    expect(medalFor(100, 450)).toBe('silver');
+    expect(medalFor(100, 900)).toBe('bronze');
+    expect(MIDGAME_GAP).toBe(120000);
+    expect(UNDOS_PER_BOARD).toBeGreaterThan(0);
+  });
+  it('old saves get the new fields (best times, daily medals and streaks)', () => {
+    const s = parseSave(JSON.stringify({ v: 1, journey: 3, daily: { last: '2026-11-08', streak: 2, best: 10, done: ['2026-11-08'] } }));
+    expect(s.bestTimes).toEqual([]);
+    expect(s.daily.times).toEqual({});
+    expect(s.daily.longest).toBe(0);
+    expect(s.daily.streak).toBe(2);
   });
   it('a broken or foreign save falls back to defaults', () => {
     expect(parseSave('{oops').journey).toBe(0);

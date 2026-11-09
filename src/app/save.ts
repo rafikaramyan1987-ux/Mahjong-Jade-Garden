@@ -4,7 +4,8 @@ import { sdk } from './sdk';
 export type Lang = 'en' | 'fr';
 
 export interface BoardInProgress {
-  mode: 'journey' | 'daily';
+  /** journey: the next board; replay: a finished journey board played again; daily: the date's challenge */
+  mode: 'journey' | 'daily' | 'replay';
   layoutId: string;
   /** journey board number (1-based) */
   board?: number;
@@ -18,6 +19,7 @@ export interface BoardInProgress {
   hints: number;
   shufflesLeft: number;
   hintsLeft: number;
+  undosLeft?: number;
   streak: number;
 }
 
@@ -38,7 +40,13 @@ export interface SaveData {
   journey: number;
   /** stars per journey board index */
   stars: number[];
-  daily: { last: string; streak: number; best: number; done: string[] };
+  /** best time (s) per journey board index (0 = not finished) */
+  bestTimes: number[];
+  /**
+   * daily challenge: last finished day, current and longest streak (days in a row), finished days, the personal
+   * best time per day and over all days
+   */
+  daily: { last: string; streak: number; longest: number; best: number; done: string[]; times: Record<string, number>; bestTime: number };
   stats: { played: number; won: number; bestTime: number; totalTime: number; bestScore: number; tilesMatched: number };
   current: BoardInProgress | null;
 }
@@ -59,7 +67,8 @@ export function defaultSave(): SaveData {
     tileSet: 'garden',
     journey: 0,
     stars: [],
-    daily: { last: '', streak: 0, best: 0, done: [] },
+    bestTimes: [],
+    daily: { last: '', streak: 0, longest: 0, best: 0, done: [], times: {}, bestTime: 0 },
     stats: { played: 0, won: 0, bestTime: 0, totalTime: 0, bestScore: 0, tilesMatched: 0 },
     current: null,
   };
@@ -76,9 +85,10 @@ export function parseSave(raw: string | null | undefined): SaveData {
       ...d,
       journey: Math.max(0, Math.floor(Number(d.journey) || 0)),
       stars: Array.isArray(d.stars) ? d.stars : [],
+      bestTimes: Array.isArray(d.bestTimes) ? d.bestTimes : [],
       tips: Array.isArray(d.tips) ? d.tips : [],
       tileSet: d.tileSet === 'classic' ? 'classic' : 'garden',
-      daily: { ...base.daily, ...(d.daily ?? {}) },
+      daily: { ...base.daily, ...(d.daily ?? {}), times: d.daily?.times && typeof d.daily.times === 'object' ? d.daily.times : {} },
       stats: { ...base.stats, ...(d.stats ?? {}) },
       current: d.current && typeof d.current === 'object' && d.current.game ? d.current : null,
     };

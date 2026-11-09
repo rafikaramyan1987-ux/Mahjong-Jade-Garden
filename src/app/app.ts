@@ -10,7 +10,7 @@ import { Game } from '../game/game';
 import { mulberry32 } from '../game/rng';
 import { FLOWERS } from '../game/tiles';
 import { boardTiles, tileWidthIn } from '../layouts/build';
-import { JOURNEY_LENGTH, dailyFor, dealLayout, journeySeed, layoutAt, layoutById, type BoardLayout, type Variant } from '../layouts/catalog';
+import { BOARDS_PER_SEASON, JOURNEY_LENGTH, dailyFor, dealLayout, journeySeed, layoutAt, layoutById, type BoardLayout, type Variant } from '../layouts/catalog';
 import { BoardView, type Rect } from '../ui/boardView';
 import { ICONS } from '../ui/icons';
 import { audio } from './audio';
@@ -20,6 +20,9 @@ import { sdk } from './sdk';
 
 export const HINTS_PER_BOARD = 3;
 export const SHUFFLES_PER_BOARD = 2;
+export const UNDOS_PER_BOARD = 5;
+/** at most one interstitial per this many ms (pre-roll included) */
+export const MIDGAME_GAP = 120_000;
 /** between-board interstitials only once this many boards have been cleared */
 export const ADS_AFTER_BOARDS = 3;
 const NO_AD_MS = 2500;
@@ -40,6 +43,14 @@ const fmtTime = (s: number) => {
 };
 
 export const todayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export type Medal = 'gold' | 'silver' | 'bronze';
+/** daily challenge medal by time (relative to the number of tiles): gold <= 3 s per tile, silver <= 5 s */
+export function medalFor(tiles: number, seconds: number): Medal {
+  if (seconds <= tiles * 3) return 'gold';
+  if (seconds <= tiles * 5) return 'silver';
+  return 'bronze';
+}
 
 /** stars for a cleared board: by hints used and time (relative to the number of tiles) */
 export function starsFor(tiles: number, seconds: number, hints: number): number {
@@ -64,7 +75,7 @@ class App {
   private view: BoardView;
   private petals: Petals;
   private play: Play | null = null;
-  private screen: 'title' | 'board' | 'garden' = 'title';
+  private screen: 'title' | 'board' | 'garden' | 'journey' = 'title';
   private layer: HTMLElement | null = null;
   private modal: HTMLElement | null = null;
   private hud: { root: HTMLElement; stats: Record<string, HTMLElement>; tools: HTMLElement; hint: HTMLButtonElement; undo: HTMLButtonElement; shuffle: HTMLButtonElement; fit: HTMLButtonElement } | null = null;
@@ -72,6 +83,8 @@ class App {
   private tutEl: HTMLElement | null = null;
   private adPaused = false;
   private prerollDone = false;
+  /** time of the last interstitial (pre-roll or between boards), for the ~2 minute gap */
+  private lastAdAt = -Infinity;
   private W = 0;
   private H = 0;
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -131,6 +144,7 @@ class App {
         hints: p.hints,
         shufflesLeft: p.shufflesLeft,
         hintsLeft: p.hintsLeft,
+        undosLeft: p.undosLeft,
         streak: p.streak,
       };
     }
@@ -211,17 +225,21 @@ class App {
       () => void this.onPlay(),
     );
     play.dataset.testid = 'play';
-    const daily = this.button(`${ICONS.calendar}<span>${t('menu.daily')}${this.save.daily.done.includes(todayKey()) ? `<br><span class="sub">${t('daily.done')} ✓</span>` : ''}</span>`, 'btn', () => this.startDaily());
+    const daily = this.button(`${ICONS.calendar}<span>${t('menu.daily')}<br><span class="sub" data-testid="daily-note">${this.dailyNote()}</span></span>`, 'btn', () => this.startDaily());
     daily.dataset.testid = 'daily';
-    const garden = this.button(`${ICONS.leaf}<span>${t('menu.garden')}</span>`, 'btn', () => this.showGarden());
+    const journeyBtn = this.button(`${ICONS.star}<span>${t('menu.journey')}</span>`, 'btn small', () => this.showJourney());
+    journeyBtn.dataset.testid = 'journey';
+    const garden = this.button(`${ICONS.leaf}<span>${t('menu.garden')}</span>`, 'btn small', () => this.showGarden());
     garden.dataset.testid = 'garden';
+    const row1 = el('div', 'row');
+    row1.append(journeyBtn, garden);
     const row = el('div', 'row');
     const stats = this.button(`${ICONS.chart}<span>${t('menu.stats')}</span>`, 'btn small', () => this.openStats());
     const settings = this.button(`${ICONS.gear}<span>${t('menu.settings')}</span>`, 'btn small', () => this.openSettings());
     stats.dataset.testid = 'stats';
     settings.dataset.testid = 'settings';
     row.append(stats, settings);
-    menu.append(play, daily, garden, row);
+    menu.append(play, daily, row1, row);
     wrap.append(menu);
     s.append(wrap);
     this.ui.append(s);
@@ -265,10 +283,22 @@ class App {
 
   // ------------------------------------------------------------ boards
 
+  /** the line under Daily Challenge: done today + streak, a gentle reminder to keep a streak, or what it is */
+  private dailyNote() {
+    const d = this.save.daily;
+    const today = todayKey();
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    if (d.done.includes(today)) return `${t('daily.done')} ✓${d.streak > 1 ? ' · ' + t('daily.streak', { n: d.streak }) : ''}`;
+    if (d.streak > 0 && d.last === todayKey(y)) return t('daily.keep', { n: d.streak });
+    return t('daily.new');
+  }
+
   private async onPlay() {
     // pre-roll interstitial: only from this click, once per session
     if (!this.prerollDone) {
       this.prerollDone = true;
+      this.lastAdAt = Date.now();
       await sdk.interstitial('preroll');
     }
     const cur = this.save.current;
@@ -286,6 +316,8 @@ class App {
 
   startJourney() {
     const n = this.save.journey;
+    // the journey board in progress is kept; a replay in progress is dropped
+    if (this.save.current?.mode === 'replay') this.save.current = null;
     const layout = layoutAt(n);
     const q = new URLSearchParams(location.search);
     const seed = q.has('seed') ? Number(q.get('seed')) : journeySeed(n);
@@ -300,7 +332,12 @@ class App {
     this.startBoard('daily', layout, seed, day);
   }
 
-  private startBoard(mode: 'journey' | 'daily', layout: BoardLayout, seed: number, day?: string, board?: number) {
+  /** replay a finished journey board (the same deal); best stars / time update only if better */
+  startReplay(n: number) {
+    this.startBoard('replay', layoutAt(n), journeySeed(n), undefined, n + 1);
+  }
+
+  private startBoard(mode: 'journey' | 'daily' | 'replay', layout: BoardLayout, seed: number, day?: string, board?: number) {
     this.enterBoardScreen();
     this.resize();
     const variant = this.chooseVariant(layout);
@@ -319,6 +356,7 @@ class App {
       hints: 0,
       hintsLeft: HINTS_PER_BOARD,
       shufflesLeft: SHUFFLES_PER_BOARD,
+      undosLeft: UNDOS_PER_BOARD,
       streak: 0,
       combo: 0,
       lastMatchAt: 0,
@@ -390,7 +428,6 @@ class App {
     const hint = tool(ICONS.hint, 'btn.hint', () => this.onHint(), 'hint');
     const undo = tool(ICONS.undo, 'btn.undo', () => this.onUndo(), 'undo');
     const shuffle = tool(ICONS.shuffle, 'btn.shuffle', () => this.onShuffle(), 'shuffle');
-    undo.querySelector('.badge')!.remove();
     const fit = this.button(ICONS.fit, 'icon-btn fit-btn', () => this.view.resetZoom());
     fit.setAttribute('aria-label', t('btn.resetZoom'));
     root.append(hud, tools, fit);
@@ -423,12 +460,16 @@ class App {
     h.stats.score.textContent = String(p.score);
     h.stats.tiles.textContent = String(g.remaining);
     h.stats.time.parentElement!.classList.toggle('hidden', !this.save.showTimer);
-    const hb = h.hint.querySelector('.badge') as HTMLElement;
-    hb.textContent = p.hintsLeft > 0 ? String(p.hintsLeft) : '+';
-    hb.classList.toggle('plus', p.hintsLeft <= 0);
-    const sb = h.shuffle.querySelector('.badge') as HTMLElement;
-    sb.textContent = p.shufflesLeft > 0 ? String(p.shufflesLeft) : '+';
-    sb.classList.toggle('plus', p.shufflesLeft <= 0);
+    // a count while some are left; "+1" (rewarded ad) once they run out
+    const badge = (b: HTMLButtonElement, left: number) => {
+      const el2 = b.querySelector('.badge') as HTMLElement;
+      el2.textContent = left > 0 ? String(left) : '+1';
+      el2.classList.toggle('plus', left <= 0);
+      b.dataset.out = String(left <= 0);
+    };
+    badge(h.hint, p.hintsLeft);
+    badge(h.shuffle, p.shufflesLeft);
+    badge(h.undo, p.undosLeft ?? UNDOS_PER_BOARD);
     h.undo.disabled = g.history.length === 0;
   }
 
@@ -511,9 +552,11 @@ class App {
 
   private onUndo() {
     const p = this.play;
-    if (!p) return;
+    if (!p || !p.gameObj.history.length) return;
+    if ((p.undosLeft ?? UNDOS_PER_BOARD) <= 0) return this.offerExtra('undo');
     const h = p.gameObj.undo();
     if (!h) return;
+    p.undosLeft = Math.max(0, (p.undosLeft ?? UNDOS_PER_BOARD) - 1);
     audio.play('undo');
     this.view.selected = -1;
     this.view.hint = null;
@@ -579,11 +622,17 @@ class App {
     return b;
   }
 
-  private offerExtra(kind: 'hint' | 'shuffle') {
+  /** label of a rewarded button: "Watch an ad: +1 Hint" (portal builds) or "+1 Hint" (web build: free) */
+  private rewardLabel(icon: string, what: string) {
+    return sdk.name === 'web' ? `${icon}<span>${t('ad.plus', { what })}</span>` : `${ICONS.play}<span>${t('ad.watchPlus', { what })}</span>`;
+  }
+
+  private offerExtra(kind: 'hint' | 'shuffle' | 'undo') {
     const panel = this.openModal();
-    panel.append(el('h2', '', t(kind === 'hint' ? 'ad.extraHint' : 'ad.extraShuffle')));
-    const free = sdk.name === 'web';
-    if (!free) panel.append(el('p', '', t('ad.offer')));
+    panel.dataset.testid = `offer-${kind}`;
+    const title: Record<typeof kind, StrKey> = { hint: 'ad.extraHint', shuffle: 'ad.extraShuffle', undo: 'ad.extraUndo' };
+    panel.append(el('h2', '', t(title[kind])));
+    if (sdk.name !== 'web') panel.append(el('p', '', t('ad.offer')));
     const grant = () => {
       const p = this.play;
       this.closeModal();
@@ -591,12 +640,17 @@ class App {
       if (kind === 'hint') {
         p.hintsLeft++;
         this.onHint();
-      } else {
+      } else if (kind === 'shuffle') {
         p.shufflesLeft++;
         this.doShuffle();
+      } else {
+        p.undosLeft = (p.undosLeft ?? 0) + 1;
+        this.onUndo();
       }
     };
-    panel.append(this.adButton(free ? `${kind === 'hint' ? ICONS.hint : ICONS.shuffle}<span>${t(kind === 'hint' ? 'btn.hint' : 'btn.shuffle')}</span>` : `${ICONS.play}<span>${t('btn.watchAd')}</span>`, grant));
+    const icon = { hint: ICONS.hint, shuffle: ICONS.shuffle, undo: ICONS.undo }[kind];
+    const what = t(kind === 'hint' ? 'btn.hint' : kind === 'shuffle' ? 'btn.shuffle' : 'btn.undo');
+    panel.append(this.adButton(this.rewardLabel(icon, what), grant));
     panel.append(this.button(t('btn.close'), 'btn ghost', () => this.closeModal()));
   }
 
@@ -638,6 +692,7 @@ class App {
         p.hints = 0;
         p.hintsLeft = HINTS_PER_BOARD;
         p.shufflesLeft = SHUFFLES_PER_BOARD;
+        p.undosLeft = UNDOS_PER_BOARD;
         this.closeModal();
         this.view.setGame(p.gameObj);
         this.updateHud();
@@ -682,14 +737,15 @@ class App {
       );
     else {
       panel.append(el('p', '', t('stuck.noShuffle')));
-      const free = sdk.name === 'web';
-      panel.append(
-        this.adButton(free ? `${ICONS.shuffle}<span>${t('ad.extraShuffle')}</span>` : `${ICONS.play}<span>${t('btn.watchAd')} · ${t('ad.extraShuffle')}</span>`, () => {
-          this.closeModal();
-          p.shufflesLeft++;
-          this.doShuffle();
-        }),
-      );
+      // rewarded "Continue": the remaining tiles are shuffled into a solvable position (no shuffle used)
+      const label = sdk.name === 'web' ? `${ICONS.shuffle}<span>${t('btn.continueFree')}</span>` : `${ICONS.play}<span>${t('ad.continue')}</span>`;
+      const b = this.adButton(label, () => {
+        this.closeModal();
+        p.shufflesLeft++;
+        this.doShuffle();
+      });
+      b.dataset.testid = 'reward-continue';
+      panel.append(b);
     }
     if (p.gameObj.history.length)
       panel.append(
@@ -824,6 +880,9 @@ class App {
     } else if (this.screen === 'garden') {
       this.showGarden(this.gardenSeason);
       this.openSettings();
+    } else if (this.screen === 'journey') {
+      this.showJourney();
+      this.openSettings();
     } else if (this.play) {
       const p = this.play;
       const tut = this.tutStep;
@@ -853,8 +912,10 @@ class App {
       ['stats.avgTime', s.won ? fmtTime(s.totalTime / s.won) : '–'],
       ['stats.bestScore', s.bestScore ? String(s.bestScore) : '–'],
       ['stats.tiles', String(s.tilesMatched)],
-      ['stats.stars', String(this.save.stars.reduce((a, b) => a + (b || 0), 0))],
-      ['stats.streak', String(this.save.daily.streak)],
+      ['stats.stars', `${this.save.stars.reduce((a, b) => a + (b || 0), 0)} / ${JOURNEY_LENGTH * 3}`],
+      ['stats.bestDaily', this.save.daily.bestTime ? fmtTime(this.save.daily.bestTime) : '–'],
+      ['stats.streak', t('daily.streak', { n: this.save.daily.streak })],
+      ['stats.longest', t('daily.streak', { n: Math.max(this.save.daily.longest || 0, this.save.daily.streak) })],
     ];
     for (const [k, v] of rows) {
       const r = el('div', 'kv');
@@ -882,20 +943,39 @@ class App {
     s.bestScore = Math.max(s.bestScore, p.score);
     let restored = -1;
     let season: Season = 0;
-    if (p.mode === 'journey') {
-      const n = this.save.journey;
+    let newBest = false;
+    let medal: Medal | null = null;
+    let dayBest = 0;
+    if (p.mode === 'journey' || p.mode === 'replay') {
+      const n = (p.board ?? this.save.journey + 1) - 1;
+      // best stars and time per board: replays only improve them
+      const prevTime = this.save.bestTimes[n] || 0;
+      newBest = p.mode === 'replay' && (stars > (this.save.stars[n] || 0) || !prevTime || p.time < prevTime);
       this.save.stars[n] = Math.max(this.save.stars[n] || 0, stars);
-      restored = n % ELEMENTS_PER_SEASON;
-      season = (Math.floor(n / ELEMENTS_PER_SEASON) % 4) as Season;
-      this.save.journey = n + 1;
+      this.save.bestTimes[n] = prevTime ? Math.min(prevTime, p.time) : p.time;
+      if (p.mode === 'journey') {
+        restored = n % ELEMENTS_PER_SEASON;
+        season = (Math.floor(n / ELEMENTS_PER_SEASON) % 4) as Season;
+        this.save.journey = Math.max(this.save.journey, n + 1);
+      }
     } else if (p.day) {
       const d = this.save.daily;
+      medal = medalFor(tiles, p.time);
+      const prev = d.times[p.day] || 0;
+      newBest = !!prev && p.time < prev;
+      d.times[p.day] = prev ? Math.min(prev, p.time) : p.time;
+      dayBest = d.times[p.day];
+      d.bestTime = d.bestTime ? Math.min(d.bestTime, p.time) : p.time;
+      // keep the last 60 days of times
+      const keys = Object.keys(d.times).sort();
+      for (const k of keys.slice(0, Math.max(0, keys.length - 60))) delete d.times[k];
       if (!d.done.includes(p.day)) {
         const y = new Date();
         y.setDate(y.getDate() - 1);
         d.streak = d.last === todayKey(y) ? d.streak + 1 : 1;
+        d.longest = Math.max(d.longest || 0, d.streak);
         d.last = p.day;
-        d.done = [...d.done.slice(-30), p.day];
+        d.done = [...d.done.slice(-60), p.day];
         d.best = Math.max(d.best, p.score);
       }
     }
@@ -906,6 +986,18 @@ class App {
     panel.dataset.testid = 'win';
     panel.append(el('h2', '', p.mode === 'daily' ? t('win.dailyDone') : t('win.title')));
     panel.append(el('div', 'sub-title', this.boardLabel(p)));
+    if (medal) {
+      const m = el('div', `medal ${medal}`);
+      m.dataset.testid = `medal-${medal}`;
+      m.append(el('span', 'disc', ICONS.star), el('b', '', t(`medal.${medal}` as StrKey)));
+      panel.append(m);
+      panel.append(el('div', 'medal-rule', t('medal.rule', { g: fmtTime(tiles * 3), s: fmtTime(tiles * 5) })));
+    }
+    if (newBest) {
+      const nb = el('div', 'new-best', t('win.newBest'));
+      nb.dataset.testid = 'new-best';
+      panel.append(nb);
+    }
     const st = el('div', 'stars');
     for (let k = 0; k < 3; k++) {
       const sp = el('span', k < stars ? 'on' : '', ICONS.star);
@@ -919,30 +1011,44 @@ class App {
       requestAnimationFrame(() => this.animateThumb(c, season, restored));
       audio.play('restore');
     }
-    for (const [k, v] of [
+    const rowsWin: [StrKey, string][] = [
       ['win.time', fmtTime(p.time)],
       ['win.score', String(p.score)],
       ['win.hints', String(p.hints)],
-    ] as [StrKey, string][]) {
+    ];
+    if (p.mode === 'replay' && p.board) rowsWin.push(['win.bestTime', fmtTime(this.save.bestTimes[p.board - 1])]);
+    if (medal) {
+      rowsWin.push(['win.personalBest', fmtTime(dayBest)]);
+      rowsWin.push(['stats.streak', t('daily.streak', { n: this.save.daily.streak })]);
+    }
+    for (const [k, v] of rowsWin) {
       const r = el('div', 'kv');
       r.append(el('span', '', t(k)), el('b', '', v));
       panel.append(r);
     }
-    const row = el('div', 'row');
-    const menu = this.button(t('btn.menu'), 'btn', () => void this.between(() => this.showTitle()));
-    menu.dataset.testid = 'win-menu';
     const next = this.button(p.mode === 'daily' ? t('btn.gotoGarden') : t('btn.next'), 'btn primary', () =>
       void this.between(() => (p.mode === 'daily' ? this.showGarden() : this.startJourney())),
     );
     next.dataset.testid = 'next';
-    row.append(menu, next);
-    panel.append(row);
+    const row = el('div', 'row');
+    const menu = this.button(t('btn.menu'), 'btn small', () => void this.between(() => this.showTitle()));
+    menu.dataset.testid = 'win-menu';
+    const journey = this.button(`${ICONS.star}<span>${t('btn.journey')}</span>`, 'btn small', () => void this.between(() => this.showJourney()));
+    journey.dataset.testid = 'win-journey';
+    row.append(menu, journey);
+    panel.append(next, row);
     this.play = null;
   }
 
-  /** Next / Menu between boards: an interstitial (GD) only once the player has cleared enough boards */
+  /**
+   * Next / Menu / Journey between boards: an interstitial (portal builds) only once the player has cleared at
+   * least 3 boards, and at most one per ~2 minutes
+   */
   private async between(go: () => void) {
-    if (this.save.stats.won >= ADS_AFTER_BOARDS) await sdk.interstitial('between');
+    if (this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
+      this.lastAdAt = Date.now();
+      await sdk.interstitial('between');
+    }
     go();
   }
 
@@ -963,6 +1069,63 @@ class App {
       if (k < 1) requestAnimationFrame(draw);
     };
     requestAnimationFrame(draw);
+  }
+
+  // ------------------------------------------------------------ journey (board select)
+
+  /** all boards in order, by season: stars and best time on finished boards, the next one highlighted, later locked */
+  showJourney() {
+    this.leaveBoard();
+    this.clearLayer();
+    this.screen = 'journey';
+    this.view.setGame(null);
+    const s = el('div', 'screen journey-screen');
+    s.dataset.testid = 'journey-screen';
+    const head = el('div', 'garden-head');
+    const back = this.button(ICONS.back, 'icon-btn', () => this.showTitle());
+    back.setAttribute('aria-label', t('btn.back'));
+    back.dataset.testid = 'back';
+    const done = Math.min(this.save.journey, JOURNEY_LENGTH);
+    head.append(back, el('h2', '', t('journey.title')), el('div', 'journey-count', t('journey.done', { n: done, total: JOURNEY_LENGTH })));
+    const list = el('div', 'journey-list');
+    let nextEl: HTMLElement | null = null;
+    for (let season = 0; season < 4; season++) {
+      const a = season * BOARDS_PER_SEASON;
+      list.append(el('h3', 'journey-season', t('journey.season', { season: t(SEASON_KEYS[season]), a: a + 1, b: a + BOARDS_PER_SEASON })));
+      const grid = el('div', 'journey-grid');
+      for (let n = a; n < a + BOARDS_PER_SEASON; n++) {
+        const state = n < this.save.journey ? 'done' : n === this.save.journey ? 'next' : 'locked';
+        const b = el('button', `jcell ${state}`);
+        b.type = 'button';
+        b.dataset.testid = `board-${n + 1}`;
+        const name = t(`layout.${layoutAt(n).family}` as StrKey);
+        let html = `<span class="num">${n + 1}</span><span class="name">${name}</span>`;
+        if (state === 'done') {
+          const st = this.save.stars[n] || 0;
+          html += `<span class="mini-stars">${[0, 1, 2].map((k) => `<i class="${k < st ? 'on' : ''}">${ICONS.star}</i>`).join('')}</span>`;
+          html += `<span class="best">${this.save.bestTimes[n] ? fmtTime(this.save.bestTimes[n]) : ''}</span>`;
+        } else if (state === 'next') html += `<span class="tag">${ICONS.play}${t('journey.next')}</span>`;
+        else html += `<span class="tag">${ICONS.lock}</span>`;
+        b.innerHTML = html;
+        b.setAttribute('aria-label', `${t('menu.board', { n: n + 1 })} · ${name}${state === 'locked' ? ' · ' + t('journey.locked') : ''}`);
+        if (state === 'locked') b.disabled = true;
+        else
+          b.addEventListener('click', () => {
+            audio.play('button');
+            if (state === 'done') this.startReplay(n);
+            else void this.onPlay();
+          });
+        if (state === 'next') nextEl = b;
+        grid.append(b);
+      }
+      list.append(grid);
+    }
+    s.append(head, list);
+    this.ui.append(s);
+    this.layer = s;
+    this.resize();
+    // bring the next board into view
+    requestAnimationFrame(() => nextEl?.scrollIntoView({ block: 'center' }));
   }
 
   // ------------------------------------------------------------ garden
@@ -1122,6 +1285,7 @@ class App {
         variant: this.play?.variant ?? null,
         hintsLeft: this.play?.hintsLeft ?? null,
         shufflesLeft: this.play?.shufflesLeft ?? null,
+        undosLeft: this.play?.undosLeft ?? null,
         adPaused: this.adPaused,
         tileWidth: this.play ? this.view.m.w : null,
       }),
@@ -1170,6 +1334,22 @@ class App {
       },
       setJourney: (n: number) => {
         this.save.journey = n;
+      },
+      /** demo progress for screenshots: n boards finished with varied stars and times */
+      demoProgress: (n: number) => {
+        this.save.journey = n;
+        for (let k = 0; k < n; k++) {
+          this.save.stars[k] = 1 + ((k * 7 + 3) % 3 === 0 ? 0 : (k * 5) % 3 === 0 ? 1 : 2);
+          this.save.bestTimes[k] = 70 + ((k * 37) % 9) * 14 + k * 6;
+        }
+        this.save.daily = { ...this.save.daily, streak: 4, longest: 6, last: todayKey(new Date(Date.now() - 86400000)) };
+        this.save.stats.won = n;
+        this.save.stats.played = n + 3;
+      },
+      showJourney: () => this.showJourney(),
+      /** set the board clock (screenshots of a realistic result) */
+      setTime: (secs: number) => {
+        if (this.play) this.play.time = secs;
       },
     };
   }

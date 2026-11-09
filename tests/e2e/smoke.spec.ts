@@ -85,3 +85,36 @@ test('tile sets: Garden by default, Classic in Settings; the first dead end show
   await expect(page.locator('[data-testid=stuck-tip]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('journey screen: finished boards can be replayed; replays keep the journey position; daily challenge gives a medal', async ({ page }) => {
+  const errors = await boot(page);
+  await page.click('[data-testid=play]');
+  await page.evaluate(() => window.__mjg.skipTutorial());
+  await page.evaluate(() => window.__mjg.solve());
+  await expect(page.locator('[data-testid=win]')).toBeVisible();
+  // from the result screen to the journey
+  await page.click('[data-testid=win-journey]');
+  await expect(page.locator('[data-testid=journey-screen]')).toBeVisible();
+  await expect(page.locator('[data-testid=board-1]')).toHaveClass(/done/);
+  await expect(page.locator('[data-testid=board-2]')).toHaveClass(/next/);
+  await expect(page.locator('[data-testid=board-3]')).toBeDisabled();
+  await expect(page.locator('[data-testid=board-1] .mini-stars i.on')).not.toHaveCount(0);
+  // replay board 1
+  await page.click('[data-testid=board-1]');
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().screen)).toBe('board');
+  await page.evaluate(() => window.__mjg.solve());
+  await expect(page.locator('[data-testid=win]')).toBeVisible();
+  expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
+  // Continue on the main menu opens the next unfinished board (board 2)
+  await page.click('[data-testid=win-menu]');
+  await expect(page.locator('[data-testid=play]')).toContainText('2');
+  // daily challenge: a medal, a personal best and the streak
+  await page.click('[data-testid=daily]');
+  await page.evaluate(() => window.__mjg.solve());
+  await expect(page.locator('[data-testid=medal-gold]')).toBeVisible();
+  await page.click('[data-testid=win-menu]');
+  await expect(page.locator('[data-testid=daily-note]')).toContainText('✓');
+  await page.click('[data-testid=stats]');
+  await expect(page.locator('[data-testid=stats-panel]')).toContainText('Best daily time');
+  expect(errors).toEqual([]);
+});
