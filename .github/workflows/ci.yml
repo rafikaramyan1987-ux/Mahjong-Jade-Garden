@@ -26,6 +26,12 @@ jobs:
           npm run build:gd
           grep -q html5.api.gamedistribution.com dist-gd/index.html
           ! grep -q html5.api.gamedistribution.com dist/index.html
+      - name: Layout audit + playtest bot (every journey and daily deal solver-verified, portrait tiles >= 34 px)
+        run: npm run audit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit
+          path: docs/audit.md
       - name: Single-file build size (< 5 MB)
         run: test $(stat -c%s dist/index.html) -lt 5000000 && test $(stat -c%s dist-gd/index.html) -lt 5000000
 
@@ -42,3 +48,6 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm run test:e2e
+      - run: npm run build:gd
+      - name: e2e of the GD build with a mocked SDK (ad rules, rewards, no-SDK fallback)
+        run: npm run test:e2e:gd

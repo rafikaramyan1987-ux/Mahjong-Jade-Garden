@@ -30,14 +30,45 @@ export class Game {
 
   /**
    * A fresh solvable deal of the full set (or as many pairs as the layout has room for).
-   * `hardness` 0..1: among 6 candidate deals of the seed, 0 takes the one with the most open matches at the start,
-   * 1 the one with the fewest.
+   * `hardness` 0..1: the seed gives 6 (easy) to 24 (hard) candidate deals; 0 takes the one with the most open
+   * matches at the start, 1 the one with the fewest.
    */
   static deal(slots: Slot[], seed: number, hardness = 0): Game {
+    const h = Math.max(0, Math.min(1, hardness));
     const cands: Game[] = [];
-    for (let k = 0; k < 6; k++) cands.push(Game.dealOne(slots, k === 0 ? seed : (seed ^ Math.imul(k, 0x9e3779b1)) >>> 0));
+    const count = 6 + Math.round(h * 18);
+    for (let k = 0; k < count; k++) cands.push(Game.dealOne(slots, k === 0 ? seed : (seed ^ Math.imul(k, 0x9e3779b1)) >>> 0));
     const scored = cands.map((g) => ({ g, open: g.openMatches().length })).sort((a, b) => b.open - a.open);
-    return scored[Math.round(Math.max(0, Math.min(1, hardness)) * (scored.length - 1))].g;
+    const game = scored[Math.round(h * (scored.length - 1))].g;
+    if (h > 0) game.tuneOpening(Math.max(2, Math.round(scored[0].open * (1 - 0.7 * h))), mulberry32(seed ^ 0x5bd1e995));
+    return game;
+  }
+
+  /**
+   * Fewer open matches at the start (harder deals): swap which matching pair goes to which step of the
+   * construction order until at most `target` matches are open. Any such swap keeps the construction order a
+   * valid solution, so the deal stays provably solvable.
+   */
+  private tuneOpening(target: number, rng: Rng) {
+    const steps = this.solution;
+    if (steps.length < 3) return;
+    let open = this.openMatches().length;
+    for (let it = 0; it < 600 && open > target; it++) {
+      const i = 1 + Math.floor(rng() * (steps.length - 1));
+      const j = 1 + Math.floor(rng() * (steps.length - 1));
+      if (i === j) continue;
+      const [a1, b1] = steps[i];
+      const [a2, b2] = steps[j];
+      const f = this.faces;
+      [f[a1], f[a2]] = [f[a2], f[a1]];
+      [f[b1], f[b2]] = [f[b2], f[b1]];
+      const now = this.openMatches().length;
+      if (now <= open) open = now;
+      else {
+        [f[a1], f[a2]] = [f[a2], f[a1]];
+        [f[b1], f[b2]] = [f[b2], f[b1]];
+      }
+    }
   }
 
   private static dealOne(slots: Slot[], seed: number): Game {

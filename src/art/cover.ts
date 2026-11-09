@@ -84,7 +84,8 @@ export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tag
   const ctx = canvas.getContext('2d')!;
   ctx.scale(dpr, dpr);
   drawBackground(ctx, W, H);
-  const wide = W / H > 1.25;
+  const tiny = H < 200;
+  const wide = !tiny && W / H > 1.6;
   if (wide) {
     // a glimpse of the garden through a round window on the right
     const r = H * 0.36;
@@ -107,9 +108,12 @@ export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tag
     ctx.arc(gx, gy, r * 1.04, 0, Math.PI * 2);
     ctx.stroke();
     fan(ctx, W * 0.29, H * 0.36, Math.round(H * 0.085));
-    logo(ctx, W * 0.29, H * 0.66, H * 0.19, tagline);
+    logo(ctx, W * 0.29, H * 0.66, Math.min(H * 0.19, W * 0.1), tagline);
+  } else if (tiny) {
+    // very small thumbnails: the logo alone, as large as it can be
+    logo(ctx, W / 2, H * 0.66, Math.min(W * 0.24, H * 0.36), null);
   } else {
-    fan(ctx, W / 2, H * 0.3, Math.round(Math.min(W * 0.16, H * 0.1)));
-    logo(ctx, W / 2, H * 0.64, Math.min(W * 0.32, H * 0.22), tagline);
+    fan(ctx, W / 2, H * 0.3, Math.round(Math.min(W * 0.16, H * 0.12)));
+    logo(ctx, W / 2, H * 0.66, Math.min(W * 0.24, H * 0.22), tagline);
   }
 }

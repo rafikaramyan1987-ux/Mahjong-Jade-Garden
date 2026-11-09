@@ -159,14 +159,19 @@ export function solve(g: Geometry, faces: number[], presentIn: boolean[], budget
     return false;
   };
   // restarts with growing node limits and some randomness in the move order (search times are heavy-tailed)
-  let slice = Math.max(500, Math.floor(budget / 16));
+  // Luby restarts: many short randomized runs, occasionally a long one (search times are heavy-tailed)
+  const luby = (i: number): number => {
+    let k = 1;
+    while ((1 << k) - 1 < i) k++;
+    return (1 << k) - 1 === i ? 1 << (k - 1) : luby(i - (1 << (k - 1)) + 1);
+  };
+  const base = 600;
   for (let round = 0; nodes < budget; round++) {
-    limit = Math.min(budget, nodes + slice);
-    noise = round === 0 ? 0 : 1;
+    limit = Math.min(budget, nodes + (round === 0 ? base * 4 : base * luby(round)));
+    noise = round === 0 ? 0 : 2;
     const r = rec();
     if (r !== null) return { solvable: r, moves: r ? path.slice() : [], nodes };
     path.length = 0;
-    slice = Math.floor(slice * 1.5);
   }
   return { solvable: null, moves: [], nodes };
 }

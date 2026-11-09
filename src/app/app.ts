@@ -10,7 +10,7 @@ import { Game } from '../game/game';
 import { mulberry32 } from '../game/rng';
 import { FLOWERS } from '../game/tiles';
 import { boardTiles, tileWidthIn } from '../layouts/build';
-import { dailyFor, dealLayout, journeySeed, layoutAt, type BoardLayout, type Variant } from '../layouts/catalog';
+import { JOURNEY_LENGTH, dailyFor, dealLayout, journeySeed, layoutAt, layoutById, type BoardLayout, type Variant } from '../layouts/catalog';
 import { BoardView, type Rect } from '../ui/boardView';
 import { ICONS } from '../ui/icons';
 import { audio } from './audio';
@@ -121,6 +121,7 @@ class App {
       this.save.current = {
         mode: p.mode,
         layoutId: p.layoutId,
+        board: p.board,
         day: p.day,
         seed: p.seed,
         variant: p.variant,
@@ -203,7 +204,7 @@ class App {
     const cur = this.save.current;
     const boardN = this.save.journey + 1;
     const play = this.button(
-      `${ICONS.play}<span>${cur && cur.mode === 'journey' ? t('menu.continue') : t('menu.play')}<br><span class="sub">${t('menu.board', { n: boardN })}</span></span>`,
+      `${ICONS.play}<span>${cur && cur.mode === 'journey' ? t('menu.continue') : t('menu.play')}<br><span class="sub">${t('menu.board', { n: boardN })} · ${t(`layout.${layoutAt(this.save.journey).family}` as StrKey)}</span></span>`,
       'btn primary',
       () => void this.onPlay(),
     );
@@ -286,7 +287,7 @@ class App {
     const layout = layoutAt(n);
     const q = new URLSearchParams(location.search);
     const seed = q.has('seed') ? Number(q.get('seed')) : journeySeed(n);
-    this.startBoard('journey', layout, seed);
+    this.startBoard('journey', layout, seed, undefined, n + 1);
   }
 
   startDaily() {
@@ -297,7 +298,7 @@ class App {
     this.startBoard('daily', layout, seed, day);
   }
 
-  private startBoard(mode: 'journey' | 'daily', layout: BoardLayout, seed: number, day?: string) {
+  private startBoard(mode: 'journey' | 'daily', layout: BoardLayout, seed: number, day?: string, board?: number) {
     this.enterBoardScreen();
     this.resize();
     const variant = this.chooseVariant(layout);
@@ -305,6 +306,7 @@ class App {
     this.play = {
       mode,
       layoutId: layout.id,
+      board,
       day,
       seed,
       variant,
@@ -610,6 +612,7 @@ class App {
   private openPause() {
     const panel = this.openModal();
     panel.append(el('h2', '', t('pause.title')));
+    if (this.play) panel.append(el('p', '', this.boardLabel(this.play)));
     const resume = this.button(`${ICONS.play}<span>${t('btn.resume')}</span>`, 'btn primary', () => this.closeModal());
     resume.dataset.testid = 'resume';
     panel.append(resume);
@@ -634,6 +637,14 @@ class App {
     const menu = this.button(t('btn.menu'), 'btn', () => this.showTitle());
     menu.dataset.testid = 'to-menu';
     panel.append(menu);
+  }
+
+  /** "Board 5 · Plum Blossom" or "Daily Challenge · Plum Blossom" */
+  private boardLabel(p: BoardInProgress) {
+    const l = layoutById(p.layoutId);
+    const name = l ? t(`layout.${l.family}` as StrKey) : '';
+    if (p.mode === 'daily') return `${t('daily.title')} · ${name}`;
+    return `${t('menu.board', { n: p.board ?? (l ? l.index + 1 : 1) })} · ${name}`;
   }
 
   private openStuck() {
@@ -786,6 +797,7 @@ class App {
     panel.append(x, el('h2', '', t('stats.title')));
     const s = this.save.stats;
     const rows: [StrKey, string][] = [
+      ['stats.journey', `${Math.min(this.save.journey, JOURNEY_LENGTH)} / ${JOURNEY_LENGTH}`],
       ['stats.played', String(s.played)],
       ['stats.won', String(s.won)],
       ['stats.rate', s.played ? Math.round((s.won / s.played) * 100) + '%' : '–'],
@@ -845,6 +857,7 @@ class App {
     const panel = this.openModal();
     panel.dataset.testid = 'win';
     panel.append(el('h2', '', p.mode === 'daily' ? t('win.dailyDone') : t('win.title')));
+    panel.append(el('div', 'sub-title', this.boardLabel(p)));
     const st = el('div', 'stars');
     for (let k = 0; k < 3; k++) {
       const sp = el('span', k < stars ? 'on' : '', ICONS.star);
@@ -1059,6 +1072,9 @@ class App {
         journey: this.save.journey,
         tutorial: this.tutStep,
         variant: this.play?.variant ?? null,
+        hintsLeft: this.play?.hintsLeft ?? null,
+        shufflesLeft: this.play?.shufflesLeft ?? null,
+        adPaused: this.adPaused,
         tileWidth: this.play ? this.view.m.w : null,
       }),
       /** a good open pair (no hint consumed) and the screen centers of its tiles */

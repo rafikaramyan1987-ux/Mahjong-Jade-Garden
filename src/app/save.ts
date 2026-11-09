@@ -6,6 +6,8 @@ export type Lang = 'en' | 'fr';
 export interface BoardInProgress {
   mode: 'journey' | 'daily';
   layoutId: string;
+  /** journey board number (1-based) */
+  board?: number;
   /** daily: the date key (YYYY-MM-DD) */
   day?: string;
   seed: number;

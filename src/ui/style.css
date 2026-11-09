@@ -283,3 +283,4 @@ body.portrait .tool { flex: 1; max-width: 120px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
 }
+.sub-title { font-size: 17px; color: var(--gold-light); margin: -2px 0 4px; }

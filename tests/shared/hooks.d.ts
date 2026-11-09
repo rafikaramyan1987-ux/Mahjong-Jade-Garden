@@ -10,6 +10,9 @@ export interface MjgState {
   tutorial: number;
   variant: 'landscape' | 'portrait' | null;
   tileWidth: number | null;
+  hintsLeft: number | null;
+  shufflesLeft: number | null;
+  adPaused: boolean;
 }
 export interface MjgRect {
   x: number;

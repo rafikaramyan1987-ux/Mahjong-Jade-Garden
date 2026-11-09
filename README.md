@@ -14,9 +14,24 @@ in portal builds.
 - Clear the board. **Hint**, **Undo** and **Shuffle** are below the board (right side in landscape); there is no
   time limit — the clock only counts toward the score and stars.
 
-Every deal is solvable: boards are dealt by reverse construction (the removal order is a proof), and a separate
-solver re-checks deals in the unit tests. Shuffle re-deals the remaining tiles the same way, so it always leaves
-a solvable board.
+Every deal is solvable: boards are dealt by reverse construction (the removal order is a proof), and an
+independent solver re-checks every journey deal and the daily challenges in CI (`npm run audit`). Shuffle re-deals
+the remaining tiles the same way, so it always leaves a solvable board.
+
+## Journey, daily challenge, balance
+
+- **64 boards** (`src/layouts/catalog.ts`): 16 shapes x 4 seasons. Along the journey the tile count grows
+  (≈ 64 → 144), stacks get taller and deals get harder (fewer open matches at the start: from 9.1 to 6.2 on
+  average). Board 16 of every season is the classic Jade Turtle (144 tiles).
+- **Two variants per layout**: a wide one and a tall one. The game uses whichever gives bigger tiles on the
+  current screen, so on a 390 x 844 phone tiles are 39–62 px wide (minimum 34 px, checked in the audit and in e2e).
+- **Jade Garden**: each cleared journey board restores one of 16 garden elements; one season per 16 boards.
+- **Daily challenge**: one deal per date (a mid-journey layout), with a streak.
+- **Statistics**: journey progress, boards played / cleared, win rate, best and average time, best score, tiles
+  matched, stars, daily streak. Stars: 3 = no hint and fast, 2 = up to 2 hints or a steady pace, 1 = cleared.
+- **Help per board**: 3 hints, 2 shuffles, unlimited undo; one more hint or shuffle for an optional rewarded ad.
+  The playtest bot (a player who takes a random open match every move) clears 97–98% of boards with at most
+  2 shuffles, so the free allowance is enough; see [docs/audit.md](docs/audit.md).
 
 ## Accessibility
 
@@ -32,7 +47,10 @@ npm run dev            # http://localhost:5173  (?fresh = ignore the save, ?seed
 npm run lint && npm run typecheck && npm test
 npm run build          # web build  -> dist/index.html     (GitHub Pages)
 npm run build:gd       # GD build   -> dist-gd/index.html  (VITE_PLATFORM=gd also works)
-npm run test:e2e       # Playwright smoke tests on the web build (1280x720 and 390x844)
+npm run test:e2e       # Playwright smoke tests on the web build (1280x720 and 390x844, portrait tile size)
+npm run test:e2e:gd    # the GD build with a mocked SDK (ad rules, rewards, no-SDK fallback)
+npm run audit          # layout audit + playtest bot -> docs/audit.md (CI fails on any unsolvable deal)
+npm run submission:gd  # submission-gd/: zip (index.html at the root), JPG thumbnails, screenshots
 node scripts/art.mjs   # store / review images from the real game -> docs/art
 node scripts/record.mjs # gameplay recordings -> docs/media
 ```
@@ -58,7 +76,8 @@ Saves use localStorage with an in-memory fallback. No external links, no logins.
 
 ## Deploy
 
-GitHub Pages is deployed from `main` only (`.github/workflows/deploy.yml`). CI runs lint, typecheck, unit tests,
-both builds and the e2e smoke tests on every pull request.
+GitHub Pages is deployed from `main` only (`.github/workflows/deploy.yml`). CI runs lint, typecheck, unit tests
+(rules, solver, catalog, GD ad wrapper with fake timers), both builds, the audit and the e2e tests of both builds
+on every pull request.
 
 See [CREDITS.md](CREDITS.md) for fonts.
