@@ -68,7 +68,7 @@ test('pre-roll on Play (once), no interstitial between boards before the 3rd boa
   await page.click('[data-testid=next]');
   await expect.poll(() => ads(page)).toEqual(['interstitial', 'interstitial']);
   await expect.poll(() => state(page).then((s) => s.adPaused)).toBe(false);
-  await expect.poll(() => state(page).then((s) => s.remaining)).toBeGreaterThan(40);
+  await expect.poll(() => state(page).then((s) => s.remaining)).toBeGreaterThan(16);
   // Menu then Play again: no second pre-roll
   await page.click('[data-testid=menu]');
   await page.click('[data-testid=to-menu]');

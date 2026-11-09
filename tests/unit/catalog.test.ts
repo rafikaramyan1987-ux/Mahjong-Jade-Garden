@@ -4,7 +4,7 @@ import { STRINGS } from '../../src/app/i18n';
 import { parseSave } from '../../src/app/save';
 import { ELEMENTS_PER_SEASON } from '../../src/art/garden';
 import { validateLayout } from '../../src/game/layout';
-import { boardTiles, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../../src/layouts/build';
+import { boardTiles, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../../src/layouts/build';
 import { BOARDS_PER_SEASON, JOURNEY_LENGTH, dailyFor, journeyLayouts, layoutAt } from '../../src/layouts/catalog';
 
 describe('journey catalog', () => {
@@ -15,13 +15,20 @@ describe('journey catalog', () => {
     expect(BOARDS_PER_SEASON).toBe(ELEMENTS_PER_SEASON);
     expect(new Set(all.map((l) => l.id)).size).toBe(64);
   });
-  it('every variant is a valid board of at most one tile set; portrait tiles >= 34 px on a 390 px phone', () => {
+  it('every variant is a valid board of at most one tile set; tiles >= 56 px on a 390 px phone and >= 64 px on 1280 x 720', () => {
     for (const l of all)
       for (const slots of [l.landscape, l.portrait]) {
         expect(validateLayout(slots), l.id).toEqual([]);
         expect(slots.length).toBeLessThanOrEqual(144);
       }
-    for (const l of all) expect(tileWidthIn(boardTiles(l.portrait), PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h), l.id).toBeGreaterThanOrEqual(MIN_PORTRAIT_TILE);
+    expect(MIN_PORTRAIT_TILE).toBe(56);
+    expect(MIN_LANDSCAPE_TILE).toBe(64);
+    for (const l of all) {
+      const bp = boardTiles(l.portrait);
+      expect(tileWidthIn(bp, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h), l.id).toBeGreaterThanOrEqual(MIN_PORTRAIT_TILE);
+      expect((bp.maxX - bp.minX) / 2, l.id).toBeLessThanOrEqual(MAX_PORTRAIT_COLS);
+      expect(tileWidthIn(boardTiles(l.landscape), DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h), l.id).toBeGreaterThanOrEqual(MIN_LANDSCAPE_TILE);
+    }
   });
   it('gets bigger and harder along the journey', () => {
     const avg = (s: number) => all.slice(s * 16, s * 16 + 16).reduce((a, l) => a + l.landscape.length, 0) / 16;

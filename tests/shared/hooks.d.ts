@@ -30,6 +30,7 @@ declare global {
       solve(leave?: number): boolean;
       setJourney(n: number): void;
       skipTutorial(): void;
+      stuck(): void;
     };
   }
 }

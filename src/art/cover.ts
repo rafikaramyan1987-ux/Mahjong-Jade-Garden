@@ -65,8 +65,8 @@ function logo(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, 
 /** three large tiles fanned out (dots, red dragon, plum flower) */
 function fan(ctx: CanvasRenderingContext2D, cx: number, cy: number, tw: number) {
   const m = tileMetrics(tw);
-  const sp = new TileSprites(m, Math.min(2, window.devicePixelRatio || 1), { palette: CLASSIC, indices: false, windLetters: ['E', 'S', 'W', 'N'] });
-  [0, 31, 34].forEach((f, i) => {
+  const sp = new TileSprites(m, Math.min(2, window.devicePixelRatio || 1), { set: 'garden', palette: CLASSIC, indices: false, windLetters: ['E', 'S', 'W', 'N'] });
+  [0, 2, 1].forEach((f, i) => {
     ctx.save();
     ctx.translate(cx + (i - 1) * tw * 1.12, cy + (i === 1 ? -m.h * 0.08 : 0));
     ctx.rotate((i - 1) * 0.16);

@@ -111,7 +111,7 @@ class App {
   }
 
   faceOptions(): FaceOptions {
-    return { palette: this.save.contrast ? CONTRAST : CLASSIC, indices: this.save.contrast, windLetters: windLetters() };
+    return { set: this.save.tileSet, palette: this.save.contrast ? CONTRAST : CLASSIC, indices: this.save.contrast, windLetters: windLetters() };
   }
 
   persist(now = false) {
@@ -171,9 +171,11 @@ class App {
     const top = this.hud.root.getBoundingClientRect().bottom;
     const portrait = document.body.classList.contains('portrait');
     const tools = this.hud.tools.getBoundingClientRect();
-    const m = Math.max(6, Math.min(W, H) * 0.015);
-    if (portrait) return { x: m, y: top + m, w: W - m * 2, h: tools.top - top - m * 2 };
-    return { x: m + Math.min(40, W * 0.02), y: top + m, w: tools.left - m * 2 - Math.min(40, W * 0.02), h: H - top - m * 2 };
+    // small margins: the board uses almost the whole screen (8 px at the sides, 6 px under / above the bars)
+    const mx = 8;
+    const my = 6;
+    if (portrait) return { x: mx, y: top + my, w: W - mx * 2, h: tools.top - top - my * 2 };
+    return { x: mx, y: top + my, w: tools.left - mx * 2, h: H - top - my * 2 };
   }
 
   // ------------------------------------------------------------ screens
@@ -241,7 +243,7 @@ class App {
     c.style.height = H + 'px';
     const ctx = c.getContext('2d')!;
     ctx.scale(dpr, dpr);
-    const faces = [0, 31, FLOWERS];
+    const faces = this.save.tileSet === 'garden' ? [0, 2, 1] : [0, 31, FLOWERS];
     faces.forEach((f, i) => {
       ctx.save();
       ctx.translate(W / 2 + (i - 1) * tw * 1.12, H * 0.56 + (i === 1 ? -m.h * 0.08 : 0));
@@ -479,9 +481,9 @@ class App {
     g.match(a, b);
     this.view.selected = -1;
     this.view.removeAnim(a, b);
-    audio.play('match');
     const now = performance.now();
     p.combo = now - p.lastMatchAt < 5000 ? Math.min(5, p.combo + 1) : 0;
+    audio.play('match', p.combo);
     p.lastMatchAt = now;
     p.score += 10 + p.combo * 2 + (bonus ? 10 : 0);
     this.save.stats.tilesMatched += 2;
@@ -531,7 +533,10 @@ class App {
 
   private doShuffle() {
     const p = this.play!;
-    if (!p.gameObj.shuffle(mulberry32((Date.now() ^ p.seed) >>> 0))) return;
+    if (!p.gameObj.shuffle(mulberry32((Date.now() ^ p.seed) >>> 0))) {
+      this.toast(t('stuck.cannot'));
+      return;
+    }
     p.shufflesLeft = Math.max(0, p.shufflesLeft - 1);
     audio.play('shuffle');
     this.view.selected = -1;
@@ -539,6 +544,12 @@ class App {
     this.view.invalidate();
     this.updateHud();
     this.persist();
+  }
+
+  private toast(text: string, ms = 3200) {
+    const tt = el('div', 'toast', text);
+    this.ui.append(tt);
+    setTimeout(() => tt.remove(), ms);
   }
 
   // ------------------------------------------------------------ ads
@@ -653,6 +664,15 @@ class App {
     const panel = this.openModal();
     panel.dataset.testid = 'stuck';
     panel.append(el('h2', '', t('stuck.title')), el('p', '', t('stuck.text')));
+    if (!this.save.tips.includes('stuck')) {
+      // the first dead end: a gentle tip, once
+      const tip = el('div', 'tip');
+      tip.dataset.testid = 'stuck-tip';
+      tip.append(el('b', '', t('stuck.tipTitle')), el('span', '', t('stuck.tip')));
+      panel.append(tip);
+      this.save.tips = [...this.save.tips, 'stuck'];
+      saveSoon(this.save);
+    }
     if (p.shufflesLeft > 0)
       panel.append(
         this.button(`${ICONS.shuffle}<span>${t('btn.shuffle')} (${p.shufflesLeft})</span>`, 'btn primary', () => {
@@ -705,6 +725,34 @@ class App {
       row.append(b);
       panel.append(row);
     };
+    // tile set: illustrated Garden (default) or Classic Mahjong faces
+    const setRow = el('div', 'setting');
+    setRow.append(el('span', '', t('settings.tiles')));
+    const setSeg = el('div', 'seg');
+    for (const [k, key] of [
+      ['garden', 'settings.tilesGarden'],
+      ['classic', 'settings.tilesClassic'],
+    ] as const) {
+      const b = el('button', '', t(key));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(this.save.tileSet === k));
+      b.dataset.testid = `tiles-${k}`;
+      b.addEventListener('click', () => {
+        if (this.save.tileSet === k) return;
+        this.save.tileSet = k;
+        saveNow(this.save);
+        audio.play('button');
+        this.view.setFaceOptions(this.faceOptions());
+        for (const o of setSeg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+        if (this.screen === 'title') {
+          const c = document.querySelector('.logo canvas') as HTMLCanvasElement | null;
+          if (c) this.drawTitleTiles(c);
+        }
+      });
+      setSeg.append(b);
+    }
+    setRow.append(setSeg);
+    panel.append(setRow);
     toggle('settings.music', () => this.save.music, (v) => audio.setMusic((this.save.music = v)), 'set-music');
     toggle('settings.sound', () => this.save.sound, (v) => audio.setSound((this.save.sound = v)), 'set-sound');
     toggle(
@@ -1102,6 +1150,8 @@ class App {
         });
         return { area: this.boardArea(), box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, tileWidth: this.view.m.w };
       },
+      /** open the "no more pairs" dialog (tests) */
+      stuck: () => this.openStuck(),
       /** skip the tutorial (tests) */
       skipTutorial: () => {
         this.save.tutorialDone = true;

@@ -7,7 +7,6 @@ import { Game } from '../game/game';
 import type { Slot } from '../game/layout';
 import { hashSeed } from '../game/rng';
 import { fitShape, type Mask, type Stack } from './build';
-import { JADE_TURTLE_LANDSCAPE, JADE_TURTLE_PORTRAIT } from './classic';
 
 export interface BoardLayout {
   id: string;
@@ -55,29 +54,47 @@ export const SHAPES: Shape[] = [
   { family: 'maple', mask: (u, v) => Math.abs(u - 0.5) + Math.abs(v - 0.5) <= 0.58, stack: 'aligned' },
   { family: 'lotus', mask: (u, v) => Math.abs(u - 0.5) <= 0.2 || Math.abs(v - 0.5) <= 0.2 || ell(u, v, 0.3, 0.3) <= 1, stack: 'mixed' },
   { family: 'cranes', mask: (u, v, a) => (a >= 1 ? Math.abs(v - (0.15 + Math.abs(u - 0.5) * 1.4)) <= 0.36 : Math.abs(u - (0.15 + Math.abs(v - 0.5) * 1.4)) <= 0.36), stack: 'offset' },
-  { family: 'turtle', mask: () => true, stack: 'offset' },
+  {
+    family: 'turtle',
+    // shell, head and tail (head toward the top on tall boards, to the left on wide ones)
+    mask: (u, v, a) => {
+      const [x, y] = a >= 1 ? [u, v] : [v, u];
+      return ell(x, y, 0.5, 0.42) <= 1.02 || (Math.abs(y - 0.5) < 0.09 && (x < 0.08 || x > 0.92));
+    },
+    stack: 'aligned',
+  },
 ];
 
 export const BOARDS_PER_SEASON = SHAPES.length;
 export const JOURNEY_LENGTH = BOARDS_PER_SEASON * 4;
 
-/** tile count and stack height for journey position n */
+/**
+ * Tile count and stack height for journey position n. Tiles stay big on every board (>= 56 px wide on a 390 px
+ * phone, >= 64 px on 1280 x 720); boards get harder through more tiles, more layers and more overlap, and
+ * through deals with fewer open pairs (see `hardness`).
+ */
 export function sizeFor(n: number) {
-  const season = Math.floor(n / BOARDS_PER_SEASON);
+  const season = Math.min(3, Math.floor(n / BOARDS_PER_SEASON));
   const k = (n % BOARDS_PER_SEASON) / (BOARDS_PER_SEASON - 1);
-  const target = Math.round(64 + season * 18 + k * 26); // 64 .. 144
-  const layers = 3 + season + (k > 0.5 ? 1 : 0); // 3 .. 7
-  return { target: Math.min(144, target), layers: Math.min(7, layers) };
+  const ranges: [number, number][] = [
+    [30, 56],
+    [56, 88],
+    [84, 116],
+    [112, 144],
+  ];
+  const [lo, hi] = ranges[season];
+  const target = Math.round(lo + (hi - lo) * k);
+  const layers = 2 + season + (k > 0.5 ? 1 : 0); // 2 .. 6
+  return { target: Math.min(144, target - (target % 2)), layers };
 }
 
 function make(n: number): BoardLayout {
   const shape = SHAPES[n % SHAPES.length];
   const hardness = Math.min(1, n / (JOURNEY_LENGTH - 1));
-  const id = `${shape.family}-${Math.floor(n / BOARDS_PER_SEASON) + 1}`;
-  if (shape.family === 'turtle') return { id, index: n, family: shape.family, landscape: JADE_TURTLE_LANDSCAPE, portrait: JADE_TURTLE_PORTRAIT, hardness };
+  const season = Math.floor(n / BOARDS_PER_SEASON);
   const { target, layers } = sizeFor(n);
   return {
-    id,
+    id: `${shape.family}-${season + 1}`,
     index: n,
     family: shape.family,
     landscape: fitShape(shape.mask, { target, layers, stack: shape.stack, portrait: false }),
@@ -86,22 +103,33 @@ function make(n: number): BoardLayout {
   };
 }
 
-let cache: BoardLayout[] | null = null;
-/** all 64 layouts in journey order (built once, a few milliseconds) */
+const cache = new Map<number, BoardLayout>();
+/** journey layout n (0..63), built on first use and cached */
+function built(n: number): BoardLayout {
+  let l = cache.get(n);
+  if (!l) {
+    l = make(n);
+    cache.set(n, l);
+  }
+  return l;
+}
+
+/** all 64 layouts in journey order */
 export function journeyLayouts(): BoardLayout[] {
-  if (!cache) cache = Array.from({ length: JOURNEY_LENGTH }, (_, n) => make(n));
-  return cache;
+  return Array.from({ length: JOURNEY_LENGTH }, (_, n) => built(n));
 }
 
 export function layoutAt(n: number): BoardLayout {
-  const all = journeyLayouts();
   // after the 64th board the journey goes on through the second half of the set
-  if (n < all.length) return all[n];
-  return all[32 + ((n - all.length) % 32)];
+  return built(n < JOURNEY_LENGTH ? n : 32 + ((n - JOURNEY_LENGTH) % 32));
 }
 
 export function layoutById(id: string): BoardLayout | undefined {
-  return journeyLayouts().find((l) => l.id === id);
+  const m = /^(.+)-(\d)$/.exec(id);
+  if (!m) return undefined;
+  const f = SHAPES.findIndex((sh) => sh.family === m[1]);
+  const n = (Number(m[2]) - 1) * BOARDS_PER_SEASON + f;
+  return f >= 0 && n >= 0 && n < JOURNEY_LENGTH ? built(n) : undefined;
 }
 
 export type Variant = 'landscape' | 'portrait';
@@ -118,6 +146,5 @@ export function journeySeed(n: number): number {
 
 /** the daily challenge of a date key (YYYY-MM-DD): a mid-journey layout and a date seed */
 export function dailyFor(day: string): { layout: BoardLayout; seed: number } {
-  const all = journeyLayouts();
-  return { layout: all[16 + (hashSeed(`daily-layout-${day}`) % 40)], seed: hashSeed(`daily-${day}`) };
+  return { layout: built(16 + (hashSeed(`daily-layout-${day}`) % 40)), seed: hashSeed(`daily-${day}`) };
 }

@@ -3,7 +3,7 @@ import { Game } from '../../src/game/game';
 import { geometry, transposeSlots, validateLayout } from '../../src/game/layout';
 import { mulberry32 } from '../../src/game/rng';
 import { solve } from '../../src/game/solver';
-import { faceMatches, fullPairs } from '../../src/game/tiles';
+import { FACE_COUNT, FLOWERS, faceMatches, fullPairs } from '../../src/game/tiles';
 import { JADE_TURTLE_LANDSCAPE, JADE_TURTLE_PORTRAIT } from '../../src/layouts/classic';
 
 const LAYOUTS = [
@@ -12,10 +12,17 @@ const LAYOUTS = [
 ];
 
 describe('tile set', () => {
-  it('has 144 tiles in 72 matching pairs', () => {
+  it('has 144 tiles in 72 pairs of identical pictures; only identical pictures match', () => {
     const pairs = fullPairs();
     expect(pairs).toHaveLength(72);
-    for (const [a, b] of pairs) expect(faceMatches(a, b)).toBe(true);
+    for (const [a, b] of pairs) expect(a).toBe(b);
+    const count = new Map<number, number>();
+    for (const [a] of pairs) count.set(a, (count.get(a) ?? 0) + 2);
+    expect(count.size).toBe(FACE_COUNT);
+    for (let f = 0; f < FACE_COUNT; f++) expect(count.get(f)).toBe(f >= FLOWERS ? 2 : 4);
+    // the former "any flower matches any flower" rule is gone
+    expect(faceMatches(FLOWERS + 2, FLOWERS + 3)).toBe(false);
+    expect(faceMatches(FLOWERS + 2, FLOWERS + 2)).toBe(true);
   });
 });
 
@@ -61,6 +68,25 @@ describe('deals', () => {
         }
         expect(proved).toBeGreaterThanOrEqual(38);
       });
+
+  it('shuffle always leaves a solver-verified position, also from dead ends', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const game = Game.deal(LAYOUTS[0].slots, seed * 31);
+      const rng = mulberry32(seed);
+      // play random open matches until stuck, then shuffle; repeat
+      for (let guard = 0; guard < 200 && !game.won; guard++) {
+        const moves = game.openMatches();
+        if (!moves.length) {
+          expect(game.shuffle(rng)).toBe(true);
+          expect(game.solvable(200000)).toBe(true);
+          continue;
+        }
+        const [a, b] = moves[Math.floor(rng() * moves.length)];
+        game.match(a, b);
+      }
+      expect(game.won).toBe(true);
+    }
+  });
 
   it('shuffle keeps the same tiles and makes the board solvable; undo restores it', () => {
     const game = Game.deal(LAYOUTS[0].slots, 7);

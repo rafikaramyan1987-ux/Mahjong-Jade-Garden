@@ -1,9 +1,12 @@
-import { FACE_COUNT } from '../game/tiles';
+import { drawFelt } from './background';
+import { GARDEN_TILES } from './gardenTiles';
 import { TileSprites, tileMetrics } from './sprites';
 import { CLASSIC, CONTRAST } from './tileArt';
 
-/** The full tile set on felt (art sheet / documentation), 9 tiles per row. */
-export function renderTileSheet(canvas: HTMLCanvasElement, W: number, H: number, contrast = false, title = 'Mahjong Jade Garden — tile set') {
+export type SheetKind = 'garden' | 'classic' | 'contrast';
+
+/** The full tile set on the felt (art sheet / documentation). Garden pictures are labelled with their names. */
+export function renderTileSheet(canvas: HTMLCanvasElement, W: number, H: number, kind: SheetKind = 'garden') {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
@@ -11,35 +14,48 @@ export function renderTileSheet(canvas: HTMLCanvasElement, W: number, H: number,
   canvas.style.height = H + 'px';
   const ctx = canvas.getContext('2d')!;
   ctx.scale(dpr, dpr);
-  const g = ctx.createRadialGradient(W / 2, H / 2, 50, W / 2, H / 2, Math.max(W, H) * 0.75);
-  g.addColorStop(0, '#1f5c45');
-  g.addColorStop(1, '#0b2a1f');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#f3e7c4';
-  ctx.font = `600 ${Math.round(W / 40)}px Lora, Georgia, serif`;
+  drawFelt(ctx, W, H);
+  const garden = kind === 'garden';
+  const title = garden ? 'Mahjong Jade Garden — Garden tile set (38 pictures)' : kind === 'classic' ? 'Mahjong Jade Garden — Classic tile set' : 'Classic tile set — colorblind-friendly suits';
+  ctx.fillStyle = '#fff6dc';
+  ctx.font = `600 ${Math.round(W / 42)}px Lora, Georgia, serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(title, W / 2, W / 28);
-  const rows: number[][] = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8],
-    [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    [18, 19, 20, 21, 22, 23, 24, 25, 26],
-    [27, 28, 29, 30, 31, 32, 33],
-    [34, 35, 36, 37, 38, 39, 40, 41],
-  ];
-  const tw = Math.floor(Math.min((W * 0.86) / 9 / 1.12, (H * 0.8) / 5 / 1.42));
+  ctx.fillText(title, W / 2, W / 30);
+  const rows: number[][] = garden
+    ? [
+        [0, 1, 2, 3, 4, 5, 6, 7],
+        [8, 9, 10, 11, 12, 13, 14, 15],
+        [16, 17, 18, 19, 20, 21, 22, 23],
+        [24, 25, 26, 27, 28, 29, 30],
+        [31, 32, 33, 34, 35, 36, 37],
+      ]
+    : [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        [9, 10, 11, 12, 13, 14, 15, 16, 17],
+        [18, 19, 20, 21, 22, 23, 24, 25, 26],
+        [27, 28, 29, 30, 31, 32, 33],
+        [34, 35, 36, 37],
+      ];
+  const perRow = Math.max(...rows.map((r) => r.length));
+  const label = garden ? 0.3 : 0;
+  const tw = Math.floor(Math.min((W * 0.9) / perRow / 1.14, (H * 0.84) / rows.length / (1.42 + label)));
   const m = tileMetrics(tw);
-  const sp = new TileSprites(m, dpr, { palette: contrast ? CONTRAST : CLASSIC, indices: contrast, windLetters: ['E', 'S', 'W', 'N'] });
-  const gapX = tw * 0.12;
-  const gapY = tw * 0.12;
-  const top = W / 28 + tw * 0.5;
+  const sp = new TileSprites(m, dpr, { set: garden ? 'garden' : 'classic', palette: kind === 'contrast' ? CONTRAST : CLASSIC, indices: kind === 'contrast', windLetters: ['E', 'S', 'W', 'N'] });
+  const gapX = tw * 0.14;
+  const rowH = m.h + m.d + tw * (0.12 + label);
+  const top = W / 30 + tw * 0.4;
+  ctx.font = `600 ${Math.max(11, Math.round(tw * 0.17))}px "Source Sans 3", Arial, sans-serif`;
   rows.forEach((row, r) => {
     const total = row.length * (m.w + m.d + gapX) - gapX;
     let x = (W - total) / 2;
     for (const f of row) {
-      sp.draw(ctx, f, x, top + r * (m.h + m.d + gapY));
+      const y = top + r * rowH;
+      sp.draw(ctx, f, x, y);
+      if (garden) {
+        ctx.fillStyle = '#fff6dc';
+        ctx.fillText(GARDEN_TILES[f].name, x + m.w / 2, y + m.h + m.d + tw * 0.22);
+      }
       x += m.w + m.d + gapX;
     }
   });
-  void FACE_COUNT;
 }

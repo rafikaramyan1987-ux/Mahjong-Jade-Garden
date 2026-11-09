@@ -13,7 +13,7 @@ function noisePattern(ctx: CanvasRenderingContext2D) {
     const v = Math.random();
     const on = v > 0.5;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = on ? 255 : 0;
-    img.data[i + 3] = Math.floor(Math.abs(v - 0.5) * 22);
+    img.data[i + 3] = Math.floor(Math.abs(v - 0.5) * 14);
   }
   x.putImageData(img, 0, 0);
   // faint diagonal weave
@@ -29,9 +29,9 @@ function noisePattern(ctx: CanvasRenderingContext2D) {
 
 export function drawFelt(ctx: CanvasRenderingContext2D, W: number, H: number) {
   const g = ctx.createRadialGradient(W * 0.5, H * 0.45, Math.min(W, H) * 0.1, W * 0.5, H * 0.5, Math.hypot(W, H) * 0.62);
-  g.addColorStop(0, '#22694f');
-  g.addColorStop(0.55, '#174d39');
-  g.addColorStop(1, '#0a2a1e');
+  g.addColorStop(0, '#4aa67e');
+  g.addColorStop(0.55, '#358a65');
+  g.addColorStop(1, '#22664a');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = noisePattern(ctx);
@@ -72,8 +72,8 @@ function bambooLeaf(ctx: CanvasRenderingContext2D, x: number, y: number, len: nu
 
 /** bamboo silhouettes at the left edge */
 function bambooGrove(ctx: CanvasRenderingContext2D, H: number, s: number) {
-  const dark = 'rgba(6, 34, 23, 0.55)';
-  const mid = 'rgba(40, 110, 78, 0.35)';
+  const dark = 'rgba(20, 80, 55, 0.4)';
+  const mid = 'rgba(120, 200, 150, 0.28)';
   const stalks: [number, number, string, number][] = [
     [s * 0.035, s * 0.028, dark, 0.02],
     [s * 0.09, s * 0.02, mid, -0.03],
@@ -160,7 +160,7 @@ export function drawBackground(ctx: CanvasRenderingContext2D, W: number, H: numb
   // vignette
   const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
   v.addColorStop(0, 'rgba(0,0,0,0)');
-  v.addColorStop(1, 'rgba(0,10,5,0.35)');
+  v.addColorStop(1, 'rgba(10,40,25,0.16)');
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, W, H);
 }

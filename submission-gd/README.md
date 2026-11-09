@@ -13,29 +13,34 @@ Mahjong Jade Garden
 
 ## Description
 
-A calm, classic Mahjong Solitaire in a quiet Chinese garden. Match pairs of identical free tiles on traditional
-ivory tiles laid on deep jade felt, among bamboo, plum blossom and red lanterns. Every board you clear restores
+A calm, classic Mahjong Solitaire in a sunny Chinese garden. Match pairs of identical free tiles — bright,
+vivid, glossy illustrations of koi, lotus, lanterns, pandas, red pandas, cranes and more on polished ivory
+tiles — among bamboo, plum
+blossom and red lanterns (the traditional Classic tiles are one tap away in Settings). Every board you clear restores
 part of the Jade Garden — a stone lantern, a moon bridge, a koi pond, a pagoda — through spring, summer, autumn
 and winter. 64 hand-tuned boards from gentle to challenging, a new daily challenge every day, and every deal is
 guaranteed solvable. Large, clear tiles, no time pressure and soft music make it a relaxing daily game.
 
 ## Instructions
 
-Tap or click two identical tiles to remove them. A tile can be taken when nothing lies on top of it and its left
-or right side is open (blocked tiles are shaded). Any flower matches any flower and any season matches any season.
-Clear all the tiles to finish the board. Use Hint, Undo and Shuffle whenever you like; pinch or use the mouse wheel
+Tap or click two tiles with exactly the same picture to remove them. A tile can be taken when nothing lies on top
+of it and its left or right side is open (blocked tiles are shaded). Clear all the tiles to finish the board. Use Hint, Undo and Shuffle whenever you like; pinch or use the mouse wheel
 to zoom.
 
 ## Key features
 
-- Classic Mahjong Solitaire rules with the full 144-tile set, drawn as original artwork
+- Classic Mahjong Solitaire rules with 144 tiles; only identical pictures match
+- Two original tile sets: bright illustrated Garden pictures (default) and traditional Classic faces
 - 64 boards in increasing difficulty, each with a wide and a tall version so tiles are large on phones and desktops
-- Every deal is solvable (solver-verified); Shuffle always leaves a solvable board
+- Every deal is solvable (solver-verified); Shuffle always leaves a solver-verified solvable board
+- Big tiles everywhere: the board fills the screen and tiles stay large on every board; harder boards stack
+  more layers instead of shrinking the tiles
 - Jade Garden journey: restore 16 garden elements in each of the 4 seasons
 - Daily challenge, statistics and star ratings by time and hints
 - Hint, Undo and Shuffle; optional rewarded ad for an extra hint or shuffle
 - Accessibility: large high-contrast tiles, free tiles highlighted, colorblind-friendly suits, zoom, no time limit
-- Calm generated music and soft sounds; English and French
+- Light, warm music (two original pentatonic tracks with flute, guzheng and pipa) and satisfying match chimes;
+  separate music and sound switches; English and French
 - Portrait and landscape, mouse and touch; saves progress automatically
 
 ## Tags

@@ -39,7 +39,7 @@ test('title → tutorial → match tiles → clear the board → next board', as
   await expect(page.locator('[data-testid=win]')).toBeVisible({ timeout: 5000 });
   expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
   await page.click('[data-testid=next]');
-  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBeGreaterThan(40);
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBeGreaterThan(16);
   expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
   expect(errors).toEqual([]);
 });
@@ -62,5 +62,26 @@ test('menus: settings, statistics, garden, language', async ({ page }) => {
   await expect(page.locator('[data-testid=play]')).toBeVisible();
   // nothing overflows the viewport horizontally
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('tile sets: Garden by default, Classic in Settings; the first dead end shows a gentle tip once', async ({ page }) => {
+  const errors = await boot(page);
+  await page.click('[data-testid=settings]');
+  await expect(page.locator('[data-testid=tiles-garden]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('[data-testid=tiles-classic]');
+  await expect(page.locator('[data-testid=tiles-classic]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('[data-testid=tiles-garden]');
+  await page.locator('.panel .btn', { hasText: 'Close' }).click();
+  await page.click('[data-testid=play]');
+  await page.evaluate(() => window.__mjg.skipTutorial());
+  await page.evaluate(() => window.__mjg.stuck());
+  await expect(page.locator('[data-testid=stuck-tip]')).toBeVisible();
+  // Shuffle from the dialog leaves a position with open matches
+  await page.locator('[data-testid=stuck] .btn.primary').click();
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().matches)).toBeGreaterThan(0);
+  await page.evaluate(() => window.__mjg.stuck());
+  await expect(page.locator('[data-testid=stuck]')).toBeVisible();
+  await expect(page.locator('[data-testid=stuck-tip]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
