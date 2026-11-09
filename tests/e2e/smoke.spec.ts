@@ -39,7 +39,7 @@ test('title → tutorial → match tiles → clear the board → next board', as
   await expect(page.locator('[data-testid=win]')).toBeVisible({ timeout: 5000 });
   expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
   await page.click('[data-testid=next]');
-  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBeGreaterThan(40);
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBeGreaterThan(16);
   expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
   expect(errors).toEqual([]);
 });

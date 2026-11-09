@@ -12,14 +12,25 @@ export type Stack = 'aligned' | 'offset' | 'mixed';
 
 const key = (x: number, y: number) => `${x},${y}`;
 
-export function buildStack(mask: Mask, cols: number, rows: number, layers: number, stack: Stack): Slot[] {
+/**
+ * Stack a shape. `every` = how often the stack shrinks: 1 builds a pyramid (each layer smaller), 2 or 3 build
+ * towers (layers repeat before shrinking), which gives deep boards with few columns, as on a phone.
+ */
+export function buildStack(mask: Mask, cols: number, rows: number, layers: number, stack: Stack, every = 1): Slot[] {
   let cur: [number, number][] = [];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) if (mask((c + 0.5) / cols, (r + 0.5) / rows, cols / rows)) cur.push([c * 2, r * 2]);
   const out: Slot[] = cur.map(([x, y]) => [x, y, 0] as const);
+  let shrinks = 0;
   for (let z = 1; z < layers && cur.length; z++) {
+    if (z % every !== 0) {
+      // tower layer: the same tiles again, right on top
+      for (const [x, y] of cur) out.push([x, y, z]);
+      continue;
+    }
     const has = new Set(cur.map(([x, y]) => key(x, y)));
-    const offset = stack === 'offset' || (stack === 'mixed' && z % 2 === 1);
+    const offset = stack === 'offset' || (stack === 'mixed' && shrinks % 2 === 0);
+    shrinks++;
     const next: [number, number][] = [];
     for (const [x, y] of cur) {
       if (offset) {
@@ -62,52 +73,65 @@ export function boardTiles(slots: Slot[]) {
   return { minX, minY, maxX, maxY, maxZ };
 }
 
-/**
- * Tile face width (px) a board gets in an area: face w, height 1.3 w, thickness 0.11 w, layer shift 0.12 w.
- * Shared by the board view and the layout audit.
- */
+/** tile proportions (multiples of the face width): height, thickness of the coloured side, shift per layer */
+export const TILE_ASPECT = 1.3;
+export const TILE_DEPTH = 0.15;
+export const LAYER_SHIFT = 0.1;
+
+/** Tile face width (px) a board gets in an area. Shared by the board view, the layout builder and the audit. */
 export function tileWidthIn(b: { minX: number; minY: number; maxX: number; maxY: number; maxZ: number }, w: number, h: number) {
   const bw = (b.maxX - b.minX) / 2;
   const bh = (b.maxY - b.minY) / 2;
-  return Math.min(w / (bw + 0.11 + b.maxZ * 0.12 + 0.04), h / (bh * 1.3 + 0.11 + b.maxZ * 0.12 + 0.04));
+  return Math.min(w / (bw + TILE_DEPTH + b.maxZ * LAYER_SHIFT + 0.02), h / (bh * TILE_ASPECT + TILE_DEPTH + b.maxZ * LAYER_SHIFT + 0.02));
 }
 
-/** board area of a 390 x 844 phone in portrait (between the top bar and the buttons) and of 1280 x 720 */
-export const PHONE_PORTRAIT_AREA = { w: 378, h: 674 };
-export const DESKTOP_LANDSCAPE_AREA = { w: 1120, h: 628 };
-/** smallest tile face width allowed on a 390 px wide phone */
-export const MIN_PORTRAIT_TILE = 34;
+/** board area (px) of a 390 x 844 phone in portrait (between the top bar and the buttons) and of 1280 x 720 */
+export const PHONE_PORTRAIT_AREA = { w: 374, h: 676 };
+export const DESKTOP_LANDSCAPE_AREA = { w: 1166, h: 636 };
+/** smallest tile face width on every board: 56 px on a 390 x 844 phone, 64 px on 1280 x 720 */
+export const MIN_PORTRAIT_TILE = 56;
+export const MIN_LANDSCAPE_TILE = 64;
+/** portrait boards are at most this many tiles across (depth comes from layers, not columns) */
+export const MAX_PORTRAIT_COLS = 6;
 
 export interface FitOptions {
   target: number;
   layers: number;
   stack: Stack;
   portrait: boolean;
-  /** smallest tile face width allowed for the portrait variant on a 390 x 844 phone */
-  minTile?: number;
 }
 
 /**
- * Pick the grid size whose stacked board has a tile count closest to `target` (never more than 144), keeping
- * portrait boards tall and narrow (big tiles on phones) and landscape boards wide.
+ * Pick grid size, stack height and tower style so that the board has a tile count close to `target` and about
+ * `layers` layers, while keeping tiles big: portrait boards at most 6 tiles across with tiles >= 56 px on a
+ * 390 x 844 phone; landscape boards with tiles >= 64 px on 1280 x 720.
  */
 export function fitShape(mask: Mask, o: FitOptions): Slot[] {
   let best: { slots: Slot[]; score: number } | null = null;
-  const colsRange = o.portrait ? [5, 9] : [8, 16];
-  const rowsRange = o.portrait ? [7, 12] : [5, 9];
+  const colsRange = o.portrait ? [3, MAX_PORTRAIT_COLS] : [4, 16];
+  const rowsRange = o.portrait ? [4, 9] : [3, 8];
+  const area = o.portrait ? PHONE_PORTRAIT_AREA : DESKTOP_LANDSCAPE_AREA;
+  const minTile = o.portrait ? MIN_PORTRAIT_TILE : MIN_LANDSCAPE_TILE;
   for (let cols = colsRange[0]; cols <= colsRange[1]; cols++)
-    for (let rows = rowsRange[0]; rows <= rowsRange[1]; rows++) {
-      const slots = buildStack(mask, cols, rows, o.layers, o.stack);
-      const n = slots.length;
-      if (n < 24 || n > 144) continue;
-      const b = boardTiles(slots);
-      const tw = o.portrait ? tileWidthIn(b, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h) : tileWidthIn(b, DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h);
-      if (o.portrait && tw < Math.max(MIN_PORTRAIT_TILE, o.minTile ?? 0) + 0.5) continue;
-      const layersUsed = b.maxZ + 1;
-      // closest count, then the layer count asked for, then bigger tiles
-      const score = Math.abs(n - o.target) * 10 + Math.abs(layersUsed - o.layers) * 25 - tw * 0.5;
-      if (!best || score < best.score) best = { slots, score };
-    }
+    for (let rows = rowsRange[0]; rows <= rowsRange[1]; rows++)
+      for (const every of [1, 2, 3])
+        for (let layers = Math.max(1, o.layers - 1); layers <= o.layers + 3; layers++) {
+          const slots = buildStack(mask, cols, rows, layers, o.stack, every);
+          const n = slots.length;
+          if (n < 16 || n > 144) continue;
+          const b = boardTiles(slots);
+          if (o.portrait && (b.maxX - b.minX) / 2 > MAX_PORTRAIT_COLS) continue;
+          const tw = tileWidthIn(b, area.w, area.h);
+          if (tw < minTile + 0.5) continue;
+          const used = b.maxZ + 1;
+          // how much of the free area the board covers in its tighter direction (1 = fills width and height)
+          const bwPx = ((b.maxX - b.minX) / 2 + TILE_DEPTH + b.maxZ * LAYER_SHIFT) * tw;
+          const bhPx = (((b.maxY - b.minY) / 2) * TILE_ASPECT + TILE_DEPTH + b.maxZ * LAYER_SHIFT) * tw;
+          const fill = Math.min(bwPx / area.w, bhPx / area.h);
+          // closest count, then the layer count asked for, then a board that fills the screen, then pyramids
+          const score = Math.abs(n - o.target) * 6 + Math.abs(used - o.layers) * 14 + (1 - fill) * 90 + (every - 1) * 3;
+          if (!best || score < best.score) best = { slots, score };
+        }
   if (!best) throw new Error('no grid size fits this shape');
   return best.slots;
 }

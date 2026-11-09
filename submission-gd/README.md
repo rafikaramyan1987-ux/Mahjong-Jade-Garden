@@ -14,7 +14,8 @@ Mahjong Jade Garden
 ## Description
 
 A calm, classic Mahjong Solitaire in a sunny Chinese garden. Match pairs of identical free tiles — bright,
-hand-illustrated pictures of koi, lotus, lanterns, pandas, cranes and more on ivory tiles — among bamboo, plum
+vivid, glossy illustrations of koi, lotus, lanterns, pandas, red pandas, cranes and more on polished ivory
+tiles — among bamboo, plum
 blossom and red lanterns (the traditional Classic tiles are one tap away in Settings). Every board you clear restores
 part of the Jade Garden — a stone lantern, a moon bridge, a koi pond, a pagoda — through spring, summer, autumn
 and winter. 64 hand-tuned boards from gentle to challenging, a new daily challenge every day, and every deal is
@@ -32,7 +33,8 @@ to zoom.
 - Two original tile sets: bright illustrated Garden pictures (default) and traditional Classic faces
 - 64 boards in increasing difficulty, each with a wide and a tall version so tiles are large on phones and desktops
 - Every deal is solvable (solver-verified); Shuffle always leaves a solver-verified solvable board
-- Big tiles on phones: early boards are small and clear, boards grow gently along the journey
+- Big tiles everywhere: the board fills the screen and tiles stay large on every board; harder boards stack
+  more layers instead of shrinking the tiles
 - Jade Garden journey: restore 16 garden elements in each of the 4 seasons
 - Daily challenge, statistics and star ratings by time and hints
 - Hint, Undo and Shuffle; optional rewarded ad for an extra hint or shuffle

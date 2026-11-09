@@ -15,8 +15,12 @@ in portal builds.
   time limit — the clock only counts toward the score and stars.
 
 The set: 144 tiles, 38 pictures (34 x 4 tiles + 4 x 2 tiles).
-Tile sets: **Garden** (default; 38 bright illustrations: koi, lotus, lantern, teapot, panda, crane, dragon, kite,
-mooncake, …) and **Classic** (traditional Mahjong faces), switchable in Settings. All artwork is original.
+Tile sets: **Garden** (default; 38 vivid, glossy illustrations with our own cute panda, red panda, crane, koi and
+rabbit characters, plus lotus, lantern, teapot, dragon, kite, mooncake, …) and **Classic** (traditional Mahjong
+faces), switchable in Settings. All artwork is original. Every Garden picture gets a finishing pass at render time
+(soft per-shape gradients, boosted colour, a thick dark outline, a soft shadow and a glossy highlight); tiles have a
+glossy ivory face with a thick jade side so stacked layers read at a glance. `docs/art/tile-compare-before-after.png`
+shows the step from flat icons to the current pictures.
 
 Every deal is solvable: boards are dealt by reverse construction (the removal order is a proof), and an
 independent solver re-checks every journey deal and the daily challenges in CI (`npm run audit`). Shuffle re-deals
@@ -27,11 +31,11 @@ player is stuck, a gentle tip explains Shuffle and Undo.
 ## Journey, daily challenge, balance
 
 - **64 boards** (`src/layouts/catalog.ts`): 16 shapes x 4 seasons. Along the journey the tile count grows
-  (≈ 36 → 144), stacks get taller and deals get harder (fewer open matches at the start: from 7.5 to 6.2 on
-  average). Each season ends on a Jade Turtle (smaller in spring and summer, the full 144 tiles later).
-- **Two variants per layout**: a wide one and a tall one. The game uses whichever gives bigger tiles on the
-  current screen, so on a 390 x 844 phone tiles are at least 48 px wide on boards 1–16 (50–72 px) and shrink gently later
-  (≥ 44 / 40 / 36 px per season, never below 34; checked in the audit and in e2e).
+  (≈ 30 → 144) and difficulty comes from more layers (towers up to 9 high), more overlap and fewer open pairs
+  at the start (from 4.8 to 3.1 on average) — never from smaller tiles. Each season ends on a Jade Turtle.
+- **Two variants per layout**: a wide one and a tall one (at most 6 tiles across). The game uses whichever gives
+  bigger tiles on the current screen, and the board fills the screen (8 px side margins). Tiles are at least
+  56 px wide on a 390 x 844 phone and 64 px on 1280 x 720 on every board (audit, unit and e2e checks).
 - **Jade Garden**: each cleared journey board restores one of 16 garden elements; one season per 16 boards.
 - **Daily challenge**: one deal per date (a mid-journey layout), with a streak.
 - **Statistics**: journey progress, boards played / cleared, win rate, best and average time, best score, tiles

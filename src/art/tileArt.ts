@@ -613,57 +613,180 @@ export function drawTileBody(ctx: C, m: TileMetrics, pad: number) {
   const { w, h, d, r } = m;
   ctx.save();
   ctx.translate(pad, pad);
-  // shadow
+  // soft shadow on the felt / the layer below
   ctx.save();
-  ctx.shadowColor = 'rgba(10, 45, 28, 0.3)';
-  ctx.shadowBlur = d * 2.6;
-  ctx.shadowOffsetX = d * 0.9;
-  ctx.shadowOffsetY = d * 1.2;
-  ctx.fillStyle = '#123b2a';
+  ctx.shadowColor = 'rgba(8, 50, 30, 0.32)';
+  ctx.shadowBlur = d * 2.2;
+  ctx.shadowOffsetX = d * 0.7;
+  ctx.shadowOffsetY = d * 1.0;
+  ctx.fillStyle = '#1d6e4c';
   roundRect(ctx, d, d, w, h, r);
   ctx.fill();
   ctx.restore();
-  // jade back
-  const back = ctx.createLinearGradient(0, 0, w + d, h + d);
-  back.addColorStop(0, '#47b886');
-  back.addColorStop(1, '#25875c');
+  // thick jade back: the coloured side that makes every layer easy to see
+  const back = ctx.createLinearGradient(d, d, w + d, h + d);
+  back.addColorStop(0, '#3ccf8e');
+  back.addColorStop(0.5, '#1fae6c');
+  back.addColorStop(1, '#0f8550');
   ctx.fillStyle = back;
   roundRect(ctx, d, d, w, h, r);
   ctx.fill();
-  // ivory layer
-  ctx.fillStyle = '#efe5cb';
-  roundRect(ctx, d * 0.55, d * 0.55, w, h, r);
+  // a light rim along the jade edge
+  ctx.strokeStyle = 'rgba(190, 255, 220, 0.55)';
+  ctx.lineWidth = Math.max(1, d * 0.14);
+  roundRect(ctx, d * 0.98, d * 0.98, w, h, r);
+  ctx.stroke();
+  // ivory slab between face and jade back
+  const slab = ctx.createLinearGradient(0, 0, w, h);
+  slab.addColorStop(0, '#fbf3df');
+  slab.addColorStop(1, '#e6d6b2');
+  ctx.fillStyle = slab;
+  roundRect(ctx, d * 0.42, d * 0.42, w, h, r);
   ctx.fill();
-  ctx.fillStyle = 'rgba(120, 95, 50, 0.14)';
-  roundRect(ctx, d * 0.55, d * 0.55, w, h, r);
-  ctx.fill();
-  // face
-  const face = ctx.createLinearGradient(0, 0, w * 0.7, h);
+  // glossy ivory face
+  const face = ctx.createLinearGradient(0, 0, w * 0.55, h);
   face.addColorStop(0, '#ffffff');
-  face.addColorStop(0.55, '#fffaee');
-  face.addColorStop(1, '#f6edd8');
+  face.addColorStop(0.6, '#fffbf1');
+  face.addColorStop(1, '#f7eedb');
   ctx.fillStyle = face;
   roundRect(ctx, 0, 0, w, h, r);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(110, 85, 40, 0.32)';
-  ctx.lineWidth = Math.max(1, w * 0.012);
+  ctx.strokeStyle = 'rgba(120, 92, 45, 0.35)';
+  ctx.lineWidth = Math.max(1, w * 0.014);
   roundRect(ctx, 0.5, 0.5, w - 1, h - 1, r);
   ctx.stroke();
-  // inner bevel highlight
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-  ctx.lineWidth = Math.max(1, w * 0.02);
-  roundRect(ctx, w * 0.035, w * 0.035, w - w * 0.07, h - w * 0.07, r * 0.7);
+  // bright bevel on the top and left edges
+  ctx.save();
+  roundRect(ctx, 0, 0, w, h, r);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.lineWidth = Math.max(1.2, w * 0.035);
+  ctx.beginPath();
+  ctx.moveTo(w * 0.04, h * 0.85);
+  ctx.lineTo(w * 0.04, r);
+  ctx.quadraticCurveTo(w * 0.04, w * 0.04, r, w * 0.04);
+  ctx.lineTo(w * 0.85, w * 0.04);
   ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
+/**
+ * Glare drawn over the face AND its picture: a soft light reflection from the top-left, so the whole tile looks
+ * polished and glossy.
+ */
+export function drawTileGlare(ctx: C, w: number, h: number, r: number) {
+  ctx.save();
+  roundRect(ctx, 0, 0, w, h, r);
+  ctx.clip();
+  const g = ctx.createLinearGradient(0, 0, w * 0.75, h * 0.55);
+  g.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.16)');
+  g.addColorStop(0.36, 'rgba(255,255,255,0.06)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(w, 0);
+  ctx.quadraticCurveTo(w * 0.55, h * 0.28, 0, h * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  // a small specular spot
+  const s = ctx.createRadialGradient(w * 0.2, h * 0.1, 0, w * 0.2, h * 0.1, w * 0.22);
+  s.addColorStop(0, 'rgba(255,255,255,0.7)');
+  s.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = s;
+  ctx.fillRect(0, 0, w, h);
   ctx.restore();
 }
 
 /** face art placed onto a tile face of size w x h (inset a little from the edge) */
 export function drawFaceOnTile(ctx: C, face: number, w: number, h: number, o: FaceOptions) {
+  if (o.set === 'garden') return drawGlossyPicture(ctx, face, w, h);
   ctx.save();
   const ix = w * 0.06;
   const iy = h * 0.05;
   ctx.translate(ix, iy);
   ctx.scale((w - ix * 2) / FACE_W, (h - iy * 2) / FACE_H);
   drawFaceArt(ctx, face, o);
+  ctx.restore();
+}
+
+/**
+ * A Garden picture finished like premium game art: drawn large (about 80% of the face), colours boosted, a thick
+ * dark outer outline, a soft shadow under it, soft shading and a glossy highlight across the picture.
+ */
+export function drawGlossyPicture(ctx: C, face: number, w: number, h: number) {
+  const scale = Math.abs(ctx.getTransform().a) || 1;
+  const pw = Math.ceil(w * scale);
+  const ph = Math.ceil(h * scale);
+  const pic = document.createElement('canvas');
+  pic.width = pw;
+  pic.height = ph;
+  const p = pic.getContext('2d')!;
+  // the picture fills about 80% of the face
+  const ix = w * 0.04;
+  const iy = h * 0.035;
+  p.scale(scale, scale);
+  p.translate(ix, iy);
+  p.scale((w - ix * 2) / FACE_W, (h - iy * 2) / FACE_H);
+  drawGardenFace(p, face);
+  p.setTransform(1, 0, 0, 1, 0, 0);
+  // soft light from the top-left, a little shade at the bottom-right (only on the picture's own pixels)
+  p.globalCompositeOperation = 'source-atop';
+  const sh = p.createLinearGradient(0, 0, pw, ph);
+  sh.addColorStop(0, 'rgba(255,255,255,0.16)');
+  sh.addColorStop(0.5, 'rgba(255,255,255,0)');
+  sh.addColorStop(1, 'rgba(40,10,0,0.22)');
+  p.fillStyle = sh;
+  p.fillRect(0, 0, pw, ph);
+  // glossy highlight band over the upper part of the picture
+  const gl = p.createLinearGradient(0, ph * 0.08, 0, ph * 0.5);
+  gl.addColorStop(0, 'rgba(255,255,255,0.6)');
+  gl.addColorStop(0.55, 'rgba(255,255,255,0.18)');
+  gl.addColorStop(1, 'rgba(255,255,255,0)');
+  p.fillStyle = gl;
+  p.beginPath();
+  p.ellipse(pw * 0.44, ph * 0.22, pw * 0.5, ph * 0.27, -0.25, 0, Math.PI * 2);
+  p.fill();
+  // small specular sparkles
+  for (const [sx, sy, sr] of [
+    [0.3, 0.2, 0.06],
+    [0.66, 0.44, 0.035],
+  ]) {
+    const sp = p.createRadialGradient(pw * sx, ph * sy, 0, pw * sx, ph * sy, pw * sr);
+    sp.addColorStop(0, 'rgba(255,255,255,0.85)');
+    sp.addColorStop(1, 'rgba(255,255,255,0)');
+    p.fillStyle = sp;
+    p.fillRect(0, 0, pw, ph);
+  }
+  p.globalCompositeOperation = 'source-over';
+
+  ctx.save();
+  // soft drop shadow under the picture
+  ctx.shadowColor = 'rgba(60, 30, 10, 0.28)';
+  ctx.shadowBlur = w * 0.05;
+  ctx.shadowOffsetX = w * 0.012;
+  ctx.shadowOffsetY = w * 0.025;
+  // thick outer outline: the silhouette stamped around in dark ink
+  const o = Math.max(0.8, w * 0.012);
+  const ink = document.createElement('canvas');
+  ink.width = pw;
+  ink.height = ph;
+  const ic = ink.getContext('2d')!;
+  ic.drawImage(pic, 0, 0);
+  ic.globalCompositeOperation = 'source-in';
+  ic.fillStyle = '#2e1f17';
+  ic.fillRect(0, 0, pw, ph);
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    ctx.drawImage(ink, Math.cos(a) * o, Math.sin(a) * o, w, h);
+    if (k === 0) ctx.shadowColor = 'transparent';
+  }
+  ctx.restore();
+  ctx.save();
+  // vivid colours
+  ctx.filter = 'saturate(1.38) contrast(1.08)';
+  ctx.drawImage(pic, 0, 0, w, h);
   ctx.restore();
 }

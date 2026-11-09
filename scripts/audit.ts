@@ -18,8 +18,8 @@ import { Game } from '../src/game/game';
 import { validateLayout } from '../src/game/layout';
 import { mulberry32 } from '../src/game/rng';
 import { solve } from '../src/game/solver';
-import { boardTiles, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../src/layouts/build';
-import { BOARDS_PER_SEASON, dailyFor, dealLayout, journeyLayouts, journeySeed, sizeFor, type Variant } from '../src/layouts/catalog';
+import { boardTiles, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../src/layouts/build';
+import { BOARDS_PER_SEASON, dailyFor, dealLayout, journeyLayouts, journeySeed, type Variant } from '../src/layouts/catalog';
 
 const arg = (name: string, def: number) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -109,9 +109,11 @@ for (const l of journeyLayouts()) {
     if (errs.length) fail(`${label}: ${errs.slice(0, 3).join('; ')}`);
     if (slots.length > 144) fail(`${label}: ${slots.length} tiles (more than one set)`);
     const b = boardTiles(slots);
-    const tw = variant === 'portrait' ? tileWidthIn(b, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h) : 0;
-    const minTile = Math.max(MIN_PORTRAIT_TILE, sizeFor(l.index).minTile);
-    if (variant === 'portrait' && tw < minTile) fail(`${label}: tiles ${tw.toFixed(1)} px wide on a 390 px phone (minimum ${minTile})`);
+    const portrait = variant === 'portrait';
+    const tw = portrait ? tileWidthIn(b, PHONE_PORTRAIT_AREA.w, PHONE_PORTRAIT_AREA.h) : tileWidthIn(b, DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h);
+    const minTile = portrait ? MIN_PORTRAIT_TILE : MIN_LANDSCAPE_TILE;
+    if (tw < minTile) fail(`${label}: tiles ${tw.toFixed(1)} px wide (minimum ${minTile} px ${portrait ? 'on 390 x 844' : 'on 1280 x 720'})`);
+    if (portrait && (b.maxX - b.minX) / 2 > MAX_PORTRAIT_COLS) fail(`${label}: ${(b.maxX - b.minX) / 2} tiles across (maximum ${MAX_PORTRAIT_COLS})`);
     const game = dealLayout(l, variant, journeySeed(l.index));
     const st = verify(game, label);
     let openSum = game.openMatches().length;
@@ -172,6 +174,7 @@ for (let s = 1; s < 4; s++) {
   if (seasons[s].open > seasons[s - 1].open + 0.5) fail(`season ${s + 1} has more open matches at the start than season ${s}`);
 }
 const minTile = Math.min(...rows.filter((r) => r.variant === 'portrait').map((r) => r.tile));
+const minLand = Math.min(...rows.filter((r) => r.variant === 'landscape').map((r) => r.tile));
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const secs = ((Date.now() - t0) / 1000).toFixed(0);
 
@@ -183,7 +186,7 @@ const md = [
   `- ${rows.length} journey boards (64 layouts x landscape / portrait), each verified on the journey deal and ${SEEDS} more seeds: ${rows.length * (SEEDS + 1)} deals.`,
   `- ${DAYS * 2} daily challenge deals (next ${DAYS} days, both variants).`,
   '- Every deal is proven solvable twice: its construction order replays to an empty board, and the independent solver finds a solution.',
-  `- Smallest portrait tile on a 390 x 844 phone: ${minTile.toFixed(1)} px (required: ≥ 48 px on boards 1–16, then 44 / 40 / 36 px per season, never below ${MIN_PORTRAIT_TILE}).`,
+  `- Smallest tile on a 390 x 844 phone (portrait): ${minTile.toFixed(1)} px (required ≥ ${MIN_PORTRAIT_TILE} px on every board, at most ${MAX_PORTRAIT_COLS} tiles across); on 1280 x 720 (landscape): ${minLand.toFixed(1)} px (required ≥ ${MIN_LANDSCAPE_TILE} px).`,
   '- Only identical pictures match (38 pictures: 34 x 4 tiles + 4 x 2 tiles).',
   `- Shuffle (solver-verified, also from dead ends) never failed in ${rows.length * BOTS} bot games.`,
   `- Failures: ${failures.length}`,
@@ -199,11 +202,11 @@ const md = [
   '',
   '## Boards',
   '',
-  '| # | layout | variant | tiles | layers | open at start | avg open (seeds) | solution length | solver nodes | portrait tile px | bot clean | bot ≤ 2 shuffles | bot avg shuffles |',
+  '| # | layout | variant | tiles | layers | open at start | avg open (seeds) | solution length | solver nodes | tile px | bot clean | bot ≤ 2 shuffles | bot avg shuffles |',
   '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ...rows.map(
     (r) =>
-      `| ${r.n} | ${r.id} | ${r.variant} | ${r.tiles} | ${r.layers} | ${r.open} | ${r.openAvg.toFixed(1)} | ${r.length} | ${r.nodes} | ${r.variant === 'portrait' ? r.tile.toFixed(1) : ''} | ${pct(r.cleanWin)} | ${pct(r.withinShuffles)} | ${r.avgShuffles.toFixed(2)} |`,
+      `| ${r.n} | ${r.id} | ${r.variant} | ${r.tiles} | ${r.layers} | ${r.open} | ${r.openAvg.toFixed(1)} | ${r.length} | ${r.nodes} | ${r.tile.toFixed(1)} | ${pct(r.cleanWin)} | ${pct(r.withinShuffles)} | ${r.avgShuffles.toFixed(2)} |`,
   ),
   '',
 ].join('\n');

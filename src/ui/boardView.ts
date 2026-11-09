@@ -2,7 +2,7 @@
  * Draws the board on its canvas and turns taps into tile indices. Handles fitting the board to the free area,
  * pinch / wheel zoom with panning, and the small animations (selection, hint glow, matched tiles lifting away).
  */
-import { TileSprites, tileMetrics } from '../art/sprites';
+import { TileSprites, layerShift, tileMetrics } from '../art/sprites';
 import { roundRect, type FaceOptions, type TileMetrics } from '../art/tileArt';
 import type { Game } from '../game/game';
 import { tileWidthIn } from '../layouts/build';
@@ -22,7 +22,18 @@ interface Fading {
   t0: number;
 }
 
-const FADE_MS = 420;
+const FADE_MS = 520;
+const SPARK_MS = 700;
+
+interface Spark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  t0: number;
+  color: string;
+}
 const HINT_MS = 3200;
 const SHAKE_MS = 320;
 
@@ -49,6 +60,7 @@ export class BoardView {
   /** tiles pulsing for the tutorial (no timeout) */
   spotlight: number[] = [];
   private fading: Fading[] = [];
+  private sparks: Spark[] = [];
   private shake: { i: number; t0: number } | null = null;
   private raf = 0;
   private dirty = true;
@@ -113,7 +125,7 @@ export class BoardView {
     this.m = tileMetrics(tw);
     this.hx = this.m.w / 2;
     this.hy = this.m.h / 2;
-    this.ld = Math.max(2, Math.round(tw * 0.12));
+    this.ld = layerShift(tw);
     const pw = (b.maxX - b.minX) * this.hx + this.m.d + b.maxZ * this.ld;
     const ph = (b.maxY - b.minY) * this.hy + this.m.d + b.maxZ * this.ld;
     this.ox = Math.round(this.area.x + (this.area.w - pw) / 2 + b.maxZ * this.ld - b.minX * this.hx);
@@ -187,6 +199,21 @@ export class BoardView {
     for (const i of [a, b]) {
       const [x, y] = this.tileXY(i);
       this.fading.push({ i, face: g.faces[i], x, y, t0: now });
+      // a burst of little stars from the tile's center
+      if (!this.reducedMotion)
+        for (let k = 0; k < 12; k++) {
+          const ang = (k / 12) * Math.PI * 2 + Math.random() * 0.4;
+          const sp = this.m.w * (0.9 + Math.random() * 0.9);
+          this.sparks.push({
+            x: x + this.m.w / 2,
+            y: y + this.m.h / 2,
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp - this.m.w * 0.3,
+            r: this.m.w * (0.05 + Math.random() * 0.05),
+            t0: now,
+            color: ['#fff7c2', '#ffd54f', '#ffffff', '#b9f6ca'][k % 4],
+          });
+        }
     }
     if (this.hint && (this.hint.includes(a) || this.hint.includes(b))) this.hint = null;
     this.invalidate();
@@ -206,9 +233,10 @@ export class BoardView {
     this.raf = 0;
     const now = performance.now();
     this.fading = this.fading.filter((f) => now - f.t0 < FADE_MS);
+    this.sparks = this.sparks.filter((p) => now - p.t0 < SPARK_MS);
     if (this.hint && now - this.hintT0 > HINT_MS) this.hint = null;
     if (this.shake && now - this.shake.t0 > SHAKE_MS) this.shake = null;
-    const animating = this.fading.length > 0 || !!this.hint || !!this.shake || this.spotlight.length > 0;
+    const animating = this.fading.length > 0 || this.sparks.length > 0 || !!this.hint || !!this.shake || this.spotlight.length > 0;
     if (this.dirty || animating) this.draw(now);
     this.dirty = false;
     if (animating) this.raf = requestAnimationFrame(() => this.frame());
@@ -276,14 +304,39 @@ export class BoardView {
       ctx.scale(s, s);
       sp.draw(ctx, f.face, -w / 2, -h / 2);
       ctx.restore();
-      // a soft burst of light
+      // a warm glow ring
       ctx.save();
-      ctx.globalAlpha = (1 - e) * 0.7;
-      const gr = ctx.createRadialGradient(f.x + w / 2, f.y + h / 2, 0, f.x + w / 2, f.y + h / 2, w * (0.6 + e));
-      gr.addColorStop(0, 'rgba(255, 240, 200, 0.9)');
-      gr.addColorStop(1, 'rgba(255, 240, 200, 0)');
+      ctx.globalAlpha = (1 - e) * 0.85;
+      const cx2 = f.x + w / 2;
+      const cy2 = f.y + h / 2 - e * h * 0.25;
+      const gr = ctx.createRadialGradient(cx2, cy2, w * 0.2, cx2, cy2, w * (0.7 + e * 0.9));
+      gr.addColorStop(0, 'rgba(255, 246, 200, 0.95)');
+      gr.addColorStop(0.5, 'rgba(255, 214, 90, 0.5)');
+      gr.addColorStop(1, 'rgba(255, 214, 90, 0)');
       ctx.fillStyle = gr;
-      ctx.fillRect(f.x - w, f.y - h, w * 3, h * 3);
+      ctx.fillRect(cx2 - w * 2, cy2 - w * 2, w * 4, w * 4);
+      ctx.restore();
+    }
+    for (const p of this.sparks) {
+      const t = (now - p.t0) / SPARK_MS;
+      const px = p.x + p.vx * t;
+      const py = p.y + p.vy * t + this.m.w * 0.8 * t * t;
+      const rr = p.r * (1 - t * 0.6);
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.translate(px, py);
+      ctx.rotate(t * 3);
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = 'rgba(255, 220, 120, 0.9)';
+      ctx.shadowBlur = rr * 3;
+      ctx.beginPath();
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const rad = k % 2 ? rr * 0.38 : rr * 1.6;
+        ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      }
+      ctx.closePath();
+      ctx.fill();
       ctx.restore();
     }
   }

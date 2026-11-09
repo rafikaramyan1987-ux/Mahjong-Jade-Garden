@@ -25,7 +25,8 @@ async function shot(p, name) {
 }
 
 /** play n matches by clicking tiles, then select one free tile */
-async function playSome(p, n, touch) {
+async function playSome(p, n, touch, board = 1) {
+  await p.evaluate((k) => window.__mjg.setJourney(k - 1), board);
   await p.click('[data-testid=play]');
   await p.waitForSelector('[data-testid=tutorial]');
   for (let i = 0; i < 3; i++) await p.click('[data-testid=tut-next]');
@@ -42,14 +43,14 @@ await shot(await page(1920, 1080, 1, 'shot=cover'), 'cover-1920x1080.png');
 // 2. gameplay landscape 1920x1080 (1280x720 at 1.5x) and portrait 1080x1920 (540x960 at 2x)
 {
   const p = await page(1280, 720, 1.5, 'seed=21');
-  await playSome(p, 9, false);
+  await playSome(p, 4, false, 22);
   const pr = await p.evaluate(() => window.__mjg.pair());
   await p.mouse.click(pr[0][0], pr[0][1]);
   await shot(p, 'gameplay-landscape-1920x1080.png');
 }
 {
   const p = await page(540, 960, 2, 'seed=21', true);
-  await playSome(p, 9, true);
+  await playSome(p, 4, true, 22);
   const pr = await p.evaluate(() => window.__mjg.pair());
   await p.touchscreen.tap(pr[0][0], pr[0][1]);
   await shot(p, 'gameplay-portrait-1080x1920.png');
@@ -74,8 +75,7 @@ await shot(await page(1280, 720, 1.5), 'title-landscape-1920x1080.png');
 await shot(await page(540, 960, 2, '', true), 'title-portrait-1080x1920.png');
 {
   const p = await page(1280, 720, 1.5, 'seed=21');
-  await p.evaluate(() => window.__mjg.setJourney(4));
-  await playSome(p, 2, false);
+  await playSome(p, 2, false, 5);
   await p.evaluate(() => window.__mjg.solve());
   await p.waitForSelector('[data-testid=win]');
   await p.waitForTimeout(2600);

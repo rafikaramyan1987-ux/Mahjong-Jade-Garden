@@ -171,9 +171,11 @@ class App {
     const top = this.hud.root.getBoundingClientRect().bottom;
     const portrait = document.body.classList.contains('portrait');
     const tools = this.hud.tools.getBoundingClientRect();
-    const m = Math.max(6, Math.min(W, H) * 0.015);
-    if (portrait) return { x: m, y: top + m, w: W - m * 2, h: tools.top - top - m * 2 };
-    return { x: m + Math.min(40, W * 0.02), y: top + m, w: tools.left - m * 2 - Math.min(40, W * 0.02), h: H - top - m * 2 };
+    // small margins: the board uses almost the whole screen (8 px at the sides, 6 px under / above the bars)
+    const mx = 8;
+    const my = 6;
+    if (portrait) return { x: mx, y: top + my, w: W - mx * 2, h: tools.top - top - my * 2 };
+    return { x: mx, y: top + my, w: tools.left - mx * 2, h: H - top - my * 2 };
   }
 
   // ------------------------------------------------------------ screens

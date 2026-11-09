@@ -6,27 +6,54 @@
 
 type C = CanvasRenderingContext2D;
 
-const INK = '#3a2a22';
-const LW = 2.6;
+const INK = '#2e1f17';
+const LW = 3;
 
 // ---------------------------------------------------------------- helpers
 
+/** bounding box of the path being built, so each fill can get its own soft gradient */
+let box: [number, number, number, number] | null = null;
+function setBox(x0: number, y0: number, x1: number, y1: number) {
+  box = [x0, y0, x1, y1];
+}
+
+function shade(hex: string, amt: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.round(Math.min(255, Math.max(0, amt > 0 ? v + (255 - v) * amt : v * (1 + amt))));
+  return `rgb(${ch((n >> 16) & 255)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
+
+/**
+ * fill + bold outline. A plain colour becomes a soft diagonal gradient over the shape (light from the top-left),
+ * which gives every part a rounded, polished look.
+ */
 function fs(ctx: C, fill: string | CanvasGradient, lw = LW, stroke = INK) {
-  ctx.fillStyle = fill;
+  if (typeof fill === 'string' && fill.startsWith('#') && fill.length === 7) {
+    const [x0, y0, x1, y1] = box ?? [10, 14, 90, 124];
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, shade(fill, 0.42));
+    g.addColorStop(0.42, fill);
+    g.addColorStop(1, shade(fill, -0.24));
+    ctx.fillStyle = g;
+  } else ctx.fillStyle = fill;
   ctx.fill();
   if (lw > 0) {
     ctx.lineWidth = lw;
     ctx.strokeStyle = stroke;
     ctx.stroke();
   }
+  box = null;
 }
 function circle(ctx: C, x: number, y: number, r: number) {
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
+  setBox(x - r, y - r, x + r, y + r);
 }
 function ell(ctx: C, x: number, y: number, rx: number, ry: number, rot = 0) {
   ctx.beginPath();
   ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+  const m = Math.max(rx, ry);
+  setBox(x - m, y - m, x + m, y + m);
 }
 function rr(ctx: C, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -36,12 +63,24 @@ function rr(ctx: C, x: number, y: number, w: number, h: number, r: number) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+  setBox(x, y, x + w, y + h);
 }
 function poly(ctx: C, pts: number[]) {
   ctx.beginPath();
   ctx.moveTo(pts[0], pts[1]);
-  for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+  let x0 = pts[0],
+    y0 = pts[1],
+    x1 = pts[0],
+    y1 = pts[1];
+  for (let i = 2; i < pts.length; i += 2) {
+    ctx.lineTo(pts[i], pts[i + 1]);
+    x0 = Math.min(x0, pts[i]);
+    x1 = Math.max(x1, pts[i]);
+    y0 = Math.min(y0, pts[i + 1]);
+    y1 = Math.max(y1, pts[i + 1]);
+  }
   ctx.closePath();
+  setBox(x0, y0, x1, y1);
 }
 function line(ctx: C, pts: number[], color = INK, lw = LW) {
   ctx.beginPath();
@@ -63,9 +102,17 @@ function curve(ctx: C, pts: number[], color = INK, lw = LW) {
   ctx.stroke();
 }
 function dot(ctx: C, x: number, y: number, r: number, color: string) {
-  circle(ctx, x, y, r);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
+}
+
+/** a big shiny cartoon eye */
+function eye(ctx: C, x: number, y: number, r: number) {
+  dot(ctx, x, y, r, '#1b1410');
+  dot(ctx, x - r * 0.32, y - r * 0.35, r * 0.38, '#ffffff');
+  dot(ctx, x + r * 0.35, y + r * 0.3, r * 0.16, '#ffffff');
 }
 /** a soft white shine */
 function shine(ctx: C, x: number, y: number, rx: number, ry: number, rot = -0.5) {
@@ -107,46 +154,78 @@ function petalFlower(ctx: C, x: number, y: number, r: number, fill: string, cent
 // ---------------------------------------------------------------- the 38 pictures
 
 const koi = (ctx: C) => {
+  // ripples of the pond under the fish
+  ell(ctx, 50, 70, 42, 38);
+  fs(ctx, '#7fd3ff', 0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineWidth = 2;
+  for (const r of [30, 22]) {
+    ctx.beginPath();
+    ctx.ellipse(50, 70, r * 1.1, r, 0, 0.3, 2.2);
+    ctx.stroke();
+  }
   ctx.save();
-  ctx.translate(50, 67);
-  ctx.rotate(-0.55);
-  // tail
+  ctx.translate(50, 70);
+  ctx.rotate(-0.6);
+  // flowing tail with fin rays
   ctx.beginPath();
-  ctx.moveTo(-26, 0);
-  ctx.quadraticCurveTo(-44, -20, -48, -10);
-  ctx.quadraticCurveTo(-40, 0, -48, 12);
-  ctx.quadraticCurveTo(-42, 20, -26, 0);
-  fs(ctx, '#ff8a3d');
+  ctx.moveTo(-24, 0);
+  ctx.bezierCurveTo(-40, -26, -54, -20, -50, -6);
+  ctx.quadraticCurveTo(-44, 0, -50, 8);
+  ctx.bezierCurveTo(-54, 22, -40, 26, -24, 0);
+  setBox(-54, -26, -24, 26);
+  fs(ctx, '#ff7a1a');
+  for (const a of [-0.5, -0.2, 0.15, 0.45]) line(ctx, [-27, 0, -27 - Math.cos(a) * 20, Math.sin(a) * 20], 'rgba(160,40,0,0.55)', 1.4);
+  // side fins
+  ctx.beginPath();
+  ctx.moveTo(4, 9);
+  ctx.quadraticCurveTo(-2, 26, 14, 22);
+  ctx.quadraticCurveTo(14, 14, 10, 9);
+  setBox(-2, 9, 14, 26);
+  fs(ctx, '#ff8f2e', 2.2);
+  ctx.beginPath();
+  ctx.moveTo(4, -9);
+  ctx.quadraticCurveTo(-2, -26, 14, -22);
+  ctx.quadraticCurveTo(14, -14, 10, -9);
+  setBox(-2, -26, 14, -9);
+  fs(ctx, '#ff8f2e', 2.2);
   // body
-  ctx.beginPath();
-  ctx.moveTo(-28, 0);
-  ctx.quadraticCurveTo(0, -24, 34, -6);
-  ctx.quadraticCurveTo(42, 0, 34, 6);
-  ctx.quadraticCurveTo(0, 24, -28, 0);
-  fs(ctx, '#ffffff');
-  // patches
-  ell(ctx, 18, -4, 11, 8, 0.2);
-  fs(ctx, '#f04a23', 0);
-  ell(ctx, -6, 4, 9, 6, -0.3);
-  fs(ctx, '#f04a23', 0);
-  ell(ctx, -16, -6, 5, 4);
-  fs(ctx, '#ffb000', 0);
-  // outline again over patches
-  ctx.beginPath();
-  ctx.moveTo(-28, 0);
-  ctx.quadraticCurveTo(0, -24, 34, -6);
-  ctx.quadraticCurveTo(42, 0, 34, 6);
-  ctx.quadraticCurveTo(0, 24, -28, 0);
+  const body = () => {
+    ctx.beginPath();
+    ctx.moveTo(-28, 0);
+    ctx.bezierCurveTo(-14, -20, 22, -20, 38, -5);
+    ctx.quadraticCurveTo(44, 0, 38, 5);
+    ctx.bezierCurveTo(22, 20, -14, 20, -28, 0);
+    setBox(-28, -20, 44, 20);
+  };
+  body();
+  fs(ctx, '#ffffff', 0);
+  ctx.save();
+  body();
+  ctx.clip();
+  ell(ctx, 20, -6, 14, 10, 0.25);
+  fs(ctx, '#ff3d1f', 0);
+  ell(ctx, -4, 6, 11, 8, -0.4);
+  fs(ctx, '#ff3d1f', 0);
+  ell(ctx, -18, -6, 6, 5);
+  fs(ctx, '#111111', 0);
+  // scales
+  ctx.strokeStyle = 'rgba(120,40,20,0.35)';
+  ctx.lineWidth = 1.1;
+  for (let x = -16; x < 30; x += 7)
+    for (const y of [-6, 2]) {
+      ctx.beginPath();
+      ctx.arc(x, y, 4, -1.2, 1.2);
+      ctx.stroke();
+    }
+  ctx.restore();
+  body();
   ctx.strokeStyle = INK;
   ctx.lineWidth = LW;
   ctx.stroke();
-  // fins and eye
-  poly(ctx, [4, 10, -4, 22, 12, 13]);
-  fs(ctx, '#ff8a3d', 2);
-  poly(ctx, [2, -12, -6, -22, 12, -13]);
-  fs(ctx, '#ff8a3d', 2);
-  dot(ctx, 30, -3, 2.6, INK);
-  curve(ctx, [37, 3, 42, 8, 44, 14], INK, 1.6);
+  eye(ctx, 32, -4, 3.2);
+  curve(ctx, [40, 3, 46, 8, 50, 16], INK, 1.6);
+  curve(ctx, [38, 5, 42, 12, 42, 20], INK, 1.4);
   ctx.restore();
 };
 
@@ -268,89 +347,139 @@ const bamboo = (ctx: C) => {
 };
 
 const panda = (ctx: C) => {
-  // ears
-  circle(ctx, 26, 42, 11);
-  fs(ctx, '#222222');
-  circle(ctx, 74, 42, 11);
-  fs(ctx, '#222222');
-  // head
-  ell(ctx, 50, 70, 34, 30);
+  // bamboo stalk held in the arms
+  ctx.save();
+  ctx.translate(72, 74);
+  ctx.rotate(0.35);
+  rr(ctx, -5, -46, 10, 92, 4);
+  fs(ctx, '#5fcf4a', 2.2);
+  for (const y of [-22, 2, 26]) line(ctx, [-6, y, 6, y], '#2e7d32', 2.4);
+  ctx.restore();
+  leafShape(ctx, 62, 30, 22, -0.9, '#43b649');
+  // body and legs
+  ell(ctx, 50, 98, 30, 25);
   fs(ctx, '#ffffff');
-  // eye patches
-  ell(ctx, 36, 66, 9, 12, 0.5);
-  fs(ctx, '#222222', 0);
-  ell(ctx, 64, 66, 9, 12, -0.5);
-  fs(ctx, '#222222', 0);
-  dot(ctx, 37, 64, 3.2, '#ffffff');
-  dot(ctx, 63, 64, 3.2, '#ffffff');
-  // nose, mouth, cheeks
-  ell(ctx, 50, 80, 6, 4);
-  fs(ctx, '#222222', 0);
-  curve(ctx, [44, 87, 50, 92, 56, 87], INK, 2);
-  dot(ctx, 30, 82, 4, '#ffb3c1');
-  dot(ctx, 70, 82, 4, '#ffb3c1');
-  // bamboo sprig
-  leafShape(ctx, 70, 104, 22, -0.3, '#56b84f');
+  ell(ctx, 30, 114, 13, 9, -0.2);
+  fs(ctx, '#2a2a2e');
+  ell(ctx, 70, 114, 13, 9, 0.2);
+  fs(ctx, '#2a2a2e');
+  dot(ctx, 30, 115, 4, '#5b5b66');
+  dot(ctx, 70, 115, 4, '#5b5b66');
+  // arms hugging the bamboo
+  ell(ctx, 30, 88, 10, 15, 0.5);
+  fs(ctx, '#2a2a2e');
+  ell(ctx, 68, 86, 10, 14, -0.7);
+  fs(ctx, '#2a2a2e');
+  // head
+  circle(ctx, 27, 32, 11);
+  fs(ctx, '#2a2a2e');
+  circle(ctx, 73, 32, 11);
+  fs(ctx, '#2a2a2e');
+  ell(ctx, 50, 56, 32, 27);
+  fs(ctx, '#ffffff');
+  ell(ctx, 36, 55, 10, 12, 0.55);
+  fs(ctx, '#2a2a2e', 0);
+  ell(ctx, 64, 55, 10, 12, -0.55);
+  fs(ctx, '#2a2a2e', 0);
+  eye(ctx, 37, 55, 5);
+  eye(ctx, 63, 55, 5);
+  ell(ctx, 50, 68, 6, 4);
+  fs(ctx, '#2a2a2e', 0);
+  curve(ctx, [44, 74, 50, 79, 56, 74], INK, 2);
+  dot(ctx, 29, 68, 5, '#ff9fb4');
+  dot(ctx, 71, 68, 5, '#ff9fb4');
 };
 
 const crane = (ctx: C) => {
-  // legs
-  line(ctx, [44, 92, 30, 118], INK, 2.2);
-  line(ctx, [50, 92, 40, 120], INK, 2.2);
-  // wings up
-  ctx.beginPath();
-  ctx.moveTo(46, 72);
-  ctx.quadraticCurveTo(20, 40, 8, 30);
-  ctx.quadraticCurveTo(26, 34, 54, 64);
+  // long legs
+  line(ctx, [44, 92, 40, 124], INK, 2.4);
+  line(ctx, [52, 92, 56, 124], INK, 2.4);
+  line(ctx, [34, 124, 46, 124], INK, 2.4);
+  line(ctx, [50, 124, 62, 124], INK, 2.4);
+  // spread wings with feather tips
+  const wing = (dir: number) => {
+    ctx.save();
+    ctx.translate(48, 76);
+    ctx.scale(dir, 1);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(14, -24, 30, -40, 46, -44);
+    ctx.bezierCurveTo(42, -30, 40, -16, 30, -4);
+    ctx.lineTo(36, 0);
+    ctx.bezierCurveTo(26, 6, 12, 8, 0, 6);
+    setBox(0, -44, 46, 8);
+    fs(ctx, '#ffffff');
+    // black flight feathers
+    ctx.beginPath();
+    ctx.moveTo(46, -44);
+    ctx.bezierCurveTo(42, -30, 40, -16, 30, -4);
+    ctx.lineTo(36, 0);
+    ctx.bezierCurveTo(44, -14, 48, -30, 46, -44);
+    fs(ctx, '#222428', 2);
+    for (const t of [0.3, 0.5, 0.7]) line(ctx, [14 + t * 20, -10 - t * 24, 20 + t * 22, -4 - t * 18], 'rgba(60,70,90,0.35)', 1.4);
+    ctx.restore();
+  };
+  wing(-1);
+  wing(1);
+  // body and tail plumes
+  poly(ctx, [36, 88, 24, 104, 32, 102, 30, 110, 42, 96]);
+  fs(ctx, '#222428', 2);
+  ell(ctx, 48, 84, 16, 11);
   fs(ctx, '#ffffff');
-  ctx.beginPath();
-  ctx.moveTo(52, 70);
-  ctx.quadraticCurveTo(70, 34, 92, 24);
-  ctx.quadraticCurveTo(80, 50, 60, 76);
-  fs(ctx, '#ffffff');
-  // wing tips
-  poly(ctx, [8, 30, 18, 32, 14, 40]);
-  fs(ctx, '#222222', 1.6);
-  poly(ctx, [92, 24, 84, 30, 90, 34]);
-  fs(ctx, '#222222', 1.6);
-  // body
-  ell(ctx, 48, 80, 18, 12, -0.3);
-  fs(ctx, '#ffffff');
-  poly(ctx, [30, 86, 18, 98, 34, 92]);
-  fs(ctx, '#222222', 1.6);
-  // neck and head
-  curve(ctx, [60, 74, 72, 64, 70, 46], INK, 7);
-  curve(ctx, [60, 74, 72, 64, 70, 46], '#ffffff', 3.6);
-  circle(ctx, 70, 44, 6);
-  fs(ctx, '#ffffff', 2);
-  dot(ctx, 70, 39, 3.6, '#e8202a');
-  poly(ctx, [75, 44, 90, 47, 75, 48]);
-  fs(ctx, '#ffb000', 1.4);
-  dot(ctx, 71, 44, 1.4, INK);
+  // neck: black lower part, white throat
+  curve(ctx, [52, 78, 62, 64, 58, 44], INK, 9);
+  curve(ctx, [52, 78, 62, 64, 58, 44], '#222428', 5.5);
+  curve(ctx, [57, 56, 60, 50, 58, 44], '#ffffff', 5);
+  circle(ctx, 57, 40, 7);
+  fs(ctx, '#ffffff', 2.2);
+  // red crown, eye and long beak
+  ell(ctx, 56, 34, 5, 3.4);
+  fs(ctx, '#ff2436', 1.4);
+  eye(ctx, 59, 40, 2.2);
+  poly(ctx, [62, 39, 82, 44, 62, 44]);
+  fs(ctx, '#ffb23e', 1.6);
 };
 
 const rabbit = (ctx: C) => {
-  // ears
-  ell(ctx, 38, 34, 8, 22, -0.15);
+  // ears with pink insides and a little blossom
+  ell(ctx, 37, 28, 9, 24, -0.2);
   fs(ctx, '#ffffff');
-  ell(ctx, 38, 36, 3.6, 15, -0.15);
-  fs(ctx, '#ff9fbc', 0);
-  ell(ctx, 60, 34, 8, 22, 0.15);
+  ell(ctx, 37, 30, 4.4, 17, -0.2);
+  fs(ctx, '#ff9fbf', 0);
+  ell(ctx, 62, 28, 9, 24, 0.22);
   fs(ctx, '#ffffff');
-  ell(ctx, 60, 36, 3.6, 15, 0.15);
-  fs(ctx, '#ff9fbc', 0);
-  // body + head
-  ell(ctx, 52, 98, 28, 20);
+  ell(ctx, 62, 30, 4.4, 17, 0.22);
+  fs(ctx, '#ff9fbf', 0);
+  petalFlower(ctx, 70, 16, 9, '#ff6fa3', '#ffe14d', false);
+  // fluffy tail, body, feet
+  circle(ctx, 80, 104, 9);
   fs(ctx, '#ffffff');
-  circle(ctx, 76, 104, 8);
+  ell(ctx, 50, 98, 28, 24);
   fs(ctx, '#ffffff');
-  circle(ctx, 49, 68, 22);
+  ell(ctx, 50, 104, 15, 14);
+  fs(ctx, '#fff1f6', 0);
+  ell(ctx, 34, 118, 11, 6);
   fs(ctx, '#ffffff');
-  dot(ctx, 41, 66, 3.2, INK);
-  dot(ctx, 57, 66, 3.2, INK);
-  dot(ctx, 49, 74, 3, '#ff6f91');
-  dot(ctx, 36, 76, 4, '#ffc2d1');
-  dot(ctx, 62, 76, 4, '#ffc2d1');
+  ell(ctx, 64, 118, 11, 6);
+  fs(ctx, '#ffffff');
+  // paws holding a little red bean bun
+  circle(ctx, 50, 92, 9);
+  fs(ctx, '#ffe2b0', 2.2);
+  dot(ctx, 50, 92, 3, '#d1404a');
+  ell(ctx, 40, 92, 6, 5);
+  fs(ctx, '#ffffff', 2);
+  ell(ctx, 60, 92, 6, 5);
+  fs(ctx, '#ffffff', 2);
+  // head
+  ell(ctx, 49, 62, 24, 21);
+  fs(ctx, '#ffffff');
+  eye(ctx, 40, 60, 4.2);
+  eye(ctx, 58, 60, 4.2);
+  ell(ctx, 49, 68, 3.4, 2.6);
+  fs(ctx, '#ff5d8f', 1.2);
+  curve(ctx, [45, 72, 49, 75, 53, 72], INK, 1.6);
+  dot(ctx, 33, 69, 4.4, '#ffb3cc');
+  dot(ctx, 65, 69, 4.4, '#ffb3cc');
 };
 
 const turtle = (ctx: C) => {
@@ -413,15 +542,15 @@ const dragon = (ctx: C) => {
   };
   path();
   ctx.strokeStyle = INK;
-  ctx.lineWidth = 17;
+  ctx.lineWidth = 24;
   ctx.stroke();
   path();
   ctx.strokeStyle = '#2bb673';
-  ctx.lineWidth = 12;
+  ctx.lineWidth = 18;
   ctx.stroke();
   path();
   ctx.strokeStyle = '#ffd34d';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 6;
   ctx.stroke();
   ctx.restore();
   // spikes
@@ -435,7 +564,7 @@ const dragon = (ctx: C) => {
     fs(ctx, '#ff6b3d', 1.6);
   }
   // head
-  ell(ctx, 38, 34, 18, 13, -0.2);
+  ell(ctx, 38, 34, 21, 15, -0.2);
   fs(ctx, '#2bb673');
   poly(ctx, [24, 26, 18, 10, 30, 22]);
   fs(ctx, '#ffd34d', 2);
@@ -1021,22 +1150,57 @@ const paperBoat = (ctx: C) => {
   fs(ctx, '#ffe082');
 };
 
-const abacus = (ctx: C) => {
-  rr(ctx, 12, 26, 76, 88, 6);
-  fs(ctx, '#8d5a2b');
-  rr(ctx, 20, 34, 60, 72, 3);
-  fs(ctx, '#fff3dc', 2);
-  line(ctx, [20, 56, 80, 56], '#8d5a2b', 4);
-  const cols = ['#e53935', '#43a047', '#1e88e5', '#ffb300'];
-  [30, 43, 57, 70].forEach((x, i) => {
-    line(ctx, [x, 34, x, 106], '#8d5a2b', 2);
-    ell(ctx, x, 46, 6, 4.5);
-    fs(ctx, cols[i], 1.6);
-    for (let k = 0; k < 3; k++) {
-      ell(ctx, x, 66 + k * 11 + (i % 2) * 6, 6, 4.5);
-      fs(ctx, cols[i], 1.6);
-    }
-  });
+const redPanda = (ctx: C) => {
+  // big ringed tail curling up on the right
+  const rings = ['#e8642c', '#7a2e12'];
+  for (let k = 0; k < 7; k++) {
+    const t = k / 6;
+    const x = 66 + Math.sin(t * 2.2) * 20;
+    const y = 112 - t * 52;
+    ell(ctx, x, y, 11 - t * 2, 9, 0.6 - t);
+    fs(ctx, rings[k % 2], 2);
+  }
+  // body and dark legs
+  ell(ctx, 46, 98, 24, 21);
+  fs(ctx, '#e15b26');
+  ell(ctx, 30, 116, 9, 7);
+  fs(ctx, '#4a1d10');
+  ell(ctx, 56, 117, 9, 7);
+  fs(ctx, '#4a1d10');
+  ell(ctx, 46, 102, 12, 12);
+  fs(ctx, '#4a1d10', 0);
+  // ears
+  poly(ctx, [22, 48, 26, 24, 42, 40]);
+  fs(ctx, '#e8642c');
+  poly(ctx, [27, 44, 28, 31, 36, 40]);
+  fs(ctx, '#fff3e0', 0);
+  poly(ctx, [74, 48, 70, 24, 54, 40]);
+  fs(ctx, '#e8642c');
+  poly(ctx, [69, 44, 68, 31, 60, 40]);
+  fs(ctx, '#fff3e0', 0);
+  // head with cream mask
+  ell(ctx, 48, 60, 28, 23);
+  fs(ctx, '#ee6f2f');
+  ell(ctx, 34, 66, 9, 8);
+  fs(ctx, '#fff6e6', 0);
+  ell(ctx, 62, 66, 9, 8);
+  fs(ctx, '#fff6e6', 0);
+  ell(ctx, 48, 70, 9, 7);
+  fs(ctx, '#fff6e6', 0);
+  dot(ctx, 38, 48, 4, '#fff6e6');
+  dot(ctx, 58, 48, 4, '#fff6e6');
+  // tear marks, eyes, nose
+  curve(ctx, [38, 58, 40, 64, 42, 72], '#9a3412', 3);
+  curve(ctx, [58, 58, 56, 64, 54, 72], '#9a3412', 3);
+  eye(ctx, 39, 57, 4);
+  eye(ctx, 57, 57, 4);
+  ell(ctx, 48, 68, 4, 3);
+  fs(ctx, '#2a120a', 0);
+  curve(ctx, [44, 73, 48, 76, 52, 73], INK, 1.6);
+  ell(ctx, 48, 60, 28, 23);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = LW;
+  ctx.stroke();
 };
 
 /** face index -> picture (38 faces). Names are for the tile-set sheet and tests. */
@@ -1078,7 +1242,7 @@ export const GARDEN_TILES: { name: string; draw: (ctx: C) => void }[] = [
   { name: 'maple leaf', draw: maple },
   { name: 'watermelon', draw: watermelon },
   { name: 'paper boat', draw: paperBoat },
-  { name: 'abacus', draw: abacus },
+  { name: 'red panda', draw: redPanda },
 ];
 
 /** draw a Garden picture into the 100 x 134 face box (slightly enlarged: pictures fill the tile) */
@@ -1087,7 +1251,7 @@ export function drawGardenFace(ctx: C, face: number) {
   if (!t) return;
   ctx.save();
   ctx.translate(50, 67);
-  ctx.scale(1.12, 1.12);
+  ctx.scale(1.11, 1.11);
   ctx.translate(-50, -67);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
