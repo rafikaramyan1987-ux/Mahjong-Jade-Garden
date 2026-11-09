@@ -9,7 +9,7 @@ export interface BoardInProgress {
   /** daily: the date key (YYYY-MM-DD) */
   day?: string;
   seed: number;
-  transposed: boolean;
+  variant: 'landscape' | 'portrait';
   game: GameSnapshot;
   time: number;
   score: number;

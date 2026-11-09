@@ -5,6 +5,7 @@
 import { TileSprites, tileMetrics } from '../art/sprites';
 import { roundRect, type FaceOptions, type TileMetrics } from '../art/tileArt';
 import type { Game } from '../game/game';
+import { tileWidthIn } from '../layouts/build';
 
 export interface Rect {
   x: number;
@@ -101,11 +102,7 @@ export class BoardView {
 
   /** the tile size the board would get in an area (used to choose the portrait orientation) */
   static tileWidthFor(b: { minX: number; minY: number; maxX: number; maxY: number; maxZ: number }, area: Rect) {
-    const bw = (b.maxX - b.minX) / 2;
-    const bh = (b.maxY - b.minY) / 2;
-    // face width tw; height 1.3 tw; thickness 0.11 tw; layer shift 0.12 tw per layer
-    const tw = Math.min(area.w / (bw + 0.11 + b.maxZ * 0.12 + 0.12), area.h / (bh * 1.3 + 0.11 + b.maxZ * 0.12 + 0.1));
-    return Math.max(12, Math.min(tw, 140));
+    return Math.max(12, Math.min(tileWidthIn(b, area.w, area.h), 150));
   }
 
   private fit() {

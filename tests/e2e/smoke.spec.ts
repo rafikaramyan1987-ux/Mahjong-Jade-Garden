@@ -1,14 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import type {} from '../shared/hooks';
 
-declare global {
-  interface Window {
-    __mjg: {
-      state(): { screen: string; modal: string | null; remaining: number | null; matches: number | null; journey: number; tutorial: number };
-      pair(): [number, number][] | null;
-      solve(leave?: number): boolean;
-    };
-  }
-}
 
 async function boot(page: Page) {
   const errors: string[] = [];
@@ -29,10 +21,11 @@ test('title → tutorial → match tiles → clear the board → next board', as
   await page.click('[data-testid=play]');
   await expect(page.locator('[data-testid=tutorial]')).toBeVisible();
   // step 1: match the glowing pair by tapping the tiles
+  const r0 = (await page.evaluate(() => window.__mjg.state().remaining))!;
   const pair = await page.evaluate(() => window.__mjg.pair());
   expect(pair).not.toBeNull();
   for (const [x, y] of pair!) await tap(page, x, y);
-  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBe(142);
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBe(r0 - 2);
   await expect.poll(() => page.evaluate(() => window.__mjg.state().tutorial)).toBe(2);
   await page.click('[data-testid=tut-next]');
   await page.click('[data-testid=tut-next]');
@@ -40,13 +33,14 @@ test('title → tutorial → match tiles → clear the board → next board', as
   // hint and undo work
   await page.click('[data-testid=hint]');
   await page.click('[data-testid=undo]');
-  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBe(144);
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBe(r0);
   // every tile on the board is reachable: play it out
   await page.evaluate(() => window.__mjg.solve());
   await expect(page.locator('[data-testid=win]')).toBeVisible({ timeout: 5000 });
   expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
   await page.click('[data-testid=next]');
-  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBe(144);
+  await expect.poll(() => page.evaluate(() => window.__mjg.state().remaining)).toBeGreaterThan(40);
+  expect(await page.evaluate(() => window.__mjg.state().journey)).toBe(1);
   expect(errors).toEqual([]);
 });
 

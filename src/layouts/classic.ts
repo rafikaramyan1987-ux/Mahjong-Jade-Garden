@@ -1,4 +1,4 @@
-import type { Layout, Slot } from '../game/layout';
+import type { Slot } from '../game/layout';
 
 /** helper: a rectangle of tiles in full-tile columns / rows on layer z (half-unit coordinates) */
 export function rect(c0: number, r0: number, c1: number, r1: number, z: number, dx = 0, dy = 0): Slot[] {
@@ -39,4 +39,21 @@ const turtleSlots: Slot[] = [
   [13, 7, 4],
 ];
 
-export const JADE_TURTLE: Layout = { id: 'jade-turtle', name: 'layout.jadeTurtle', slots: turtleSlots };
+export const JADE_TURTLE_LANDSCAPE: Slot[] = turtleSlots;
+
+/**
+ * Tall Jade Turtle for portrait screens, also 144 tiles: an 8-wide, 11-row shell (two 7-wide rows on half
+ * steps) with the head on top, then 36, 16, 4 and the crown tile.
+ */
+const tallBase: Slot[] = [];
+[8, 7, 8, 8, 8, 8, 8, 8, 8, 7, 8].forEach((w, r) => {
+  for (let c = 0; c < w; c++) tallBase.push([c * 2 + (w === 7 ? 1 : 0), (r + 1) * 2, 0]);
+});
+export const JADE_TURTLE_PORTRAIT: Slot[] = [
+  ...tallBase,
+  [7, 0, 0],
+  ...rect(1, 4, 6, 9, 1),
+  ...rect(2, 5, 5, 8, 2),
+  ...rect(3, 6, 4, 7, 3),
+  [7, 13, 4],
+];

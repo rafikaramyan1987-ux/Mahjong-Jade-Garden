@@ -7,10 +7,10 @@ import { ELEMENTS, ELEMENTS_PER_SEASON, SEASON_KEYS, drawGarden, type Season } f
 import { TileSprites, tileMetrics } from '../art/sprites';
 import { CLASSIC, CONTRAST, type FaceOptions } from '../art/tileArt';
 import { Game } from '../game/game';
-import { transposeSlots } from '../game/layout';
-import { hashSeed, mulberry32 } from '../game/rng';
+import { mulberry32 } from '../game/rng';
 import { FLOWERS } from '../game/tiles';
-import { LAYOUTS, layoutById } from '../layouts';
+import { boardTiles, tileWidthIn } from '../layouts/build';
+import { dailyFor, dealLayout, journeySeed, layoutAt, type BoardLayout, type Variant } from '../layouts/catalog';
 import { BoardView, type Rect } from '../ui/boardView';
 import { ICONS } from '../ui/icons';
 import { audio } from './audio';
@@ -123,7 +123,7 @@ class App {
         layoutId: p.layoutId,
         day: p.day,
         seed: p.seed,
-        transposed: p.transposed,
+        variant: p.variant,
         game: p.gameObj.snapshot(),
         time: p.time,
         score: p.score,
@@ -273,43 +273,41 @@ class App {
     else this.startJourney();
   }
 
-  private chooseTransposed(slots: Game['g']['slots']) {
-    // in tall portrait screens, the board turned a quarter gives bigger tiles; the rules follow the turned board
-    if (this.H <= this.W * 1.05) return false;
-    const area = { x: 0, y: 0, w: this.W - 20, h: this.H - 200 };
-    const g1 = new Game(slots, slots.map(() => 0)).g.bounds;
-    const g2 = new Game(transposeSlots(slots), slots.map(() => 0)).g.bounds;
-    return BoardView.tileWidthFor(g2, area) > BoardView.tileWidthFor(g1, area) * 1.15;
+  /** the layout variant (wide or tall) that gives the biggest tiles in the current board area */
+  private chooseVariant(l: BoardLayout): Variant {
+    const area = this.boardArea();
+    const wl = tileWidthIn(boardTiles(l.landscape), area.w, area.h);
+    const wp = tileWidthIn(boardTiles(l.portrait), area.w, area.h);
+    return wp > wl ? 'portrait' : 'landscape';
   }
 
   startJourney() {
     const n = this.save.journey;
-    const layout = LAYOUTS[n % LAYOUTS.length];
+    const layout = layoutAt(n);
     const q = new URLSearchParams(location.search);
-    const seed = q.has('seed') ? Number(q.get('seed')) : hashSeed(`journey-${n}-${layout.id}`);
-    this.startBoard('journey', layout.id, seed);
+    const seed = q.has('seed') ? Number(q.get('seed')) : journeySeed(n);
+    this.startBoard('journey', layout, seed);
   }
 
   startDaily() {
     const day = todayKey();
-    const layout = LAYOUTS[hashSeed(day) % LAYOUTS.length];
     const cur = this.save.current;
     if (cur && cur.mode === 'daily' && cur.day === day) return this.resumeBoard(cur);
-    this.startBoard('daily', layout.id, hashSeed(`daily-${day}`), day);
+    const { layout, seed } = dailyFor(day);
+    this.startBoard('daily', layout, seed, day);
   }
 
-  private startBoard(mode: 'journey' | 'daily', layoutId: string, seed: number, day?: string) {
-    const layout = layoutById(layoutId);
+  private startBoard(mode: 'journey' | 'daily', layout: BoardLayout, seed: number, day?: string) {
     this.enterBoardScreen();
-    const transposed = this.chooseTransposed(layout.slots);
-    const slots = transposed ? transposeSlots(layout.slots) : layout.slots;
-    const game = Game.deal(slots, seed);
+    this.resize();
+    const variant = this.chooseVariant(layout);
+    const game = dealLayout(layout, variant, seed);
     this.play = {
       mode,
-      layoutId,
+      layoutId: layout.id,
       day,
       seed,
-      transposed,
+      variant,
       game: game.snapshot(),
       gameObj: game,
       time: 0,
@@ -1060,7 +1058,8 @@ class App {
         score: this.play?.score ?? null,
         journey: this.save.journey,
         tutorial: this.tutStep,
-        transposed: this.play?.transposed ?? null,
+        variant: this.play?.variant ?? null,
+        tileWidth: this.play ? this.view.m.w : null,
       }),
       /** a good open pair (no hint consumed) and the screen centers of its tiles */
       pair: () => {
@@ -1069,6 +1068,29 @@ class App {
         return m ? m.map((i) => this.view.tileCenter(i)) : null;
       },
       center: (i: number) => this.view.tileCenter(i),
+      /** the board area and the box the tiles cover (screen px) */
+      fill: () => {
+        const g = this.play?.gameObj;
+        if (!g) return null;
+        let x0 = Infinity,
+          y0 = Infinity,
+          x1 = -Infinity,
+          y1 = -Infinity;
+        g.present.forEach((p, i) => {
+          if (!p) return;
+          const r = this.view.tileRect(i);
+          x0 = Math.min(x0, r.x);
+          y0 = Math.min(y0, r.y);
+          x1 = Math.max(x1, r.x + r.w);
+          y1 = Math.max(y1, r.y + r.h);
+        });
+        return { area: this.boardArea(), box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, tileWidth: this.view.m.w };
+      },
+      /** skip the tutorial (tests) */
+      skipTutorial: () => {
+        this.save.tutorialDone = true;
+        this.closeTutorial();
+      },
       /** finish the board instantly (used by e2e tests and the art scripts) */
       solve: (leave = 0) => {
         const p = this.play;

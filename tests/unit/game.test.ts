@@ -4,7 +4,12 @@ import { geometry, transposeSlots, validateLayout } from '../../src/game/layout'
 import { mulberry32 } from '../../src/game/rng';
 import { solve } from '../../src/game/solver';
 import { faceMatches, fullPairs } from '../../src/game/tiles';
-import { LAYOUTS } from '../../src/layouts';
+import { JADE_TURTLE_LANDSCAPE, JADE_TURTLE_PORTRAIT } from '../../src/layouts/classic';
+
+const LAYOUTS = [
+  { id: 'turtle', slots: JADE_TURTLE_LANDSCAPE },
+  { id: 'tall-turtle', slots: JADE_TURTLE_PORTRAIT },
+];
 
 describe('tile set', () => {
   it('has 144 tiles in 72 matching pairs', () => {

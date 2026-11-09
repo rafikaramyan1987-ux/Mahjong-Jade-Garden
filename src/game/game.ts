@@ -28,8 +28,19 @@ export class Game {
     this.present = present ? present.slice() : faces.map((f) => f >= 0);
   }
 
-  /** A fresh solvable deal of the full set (or as many pairs as the layout has room for). */
-  static deal(slots: Slot[], seed: number): Game {
+  /**
+   * A fresh solvable deal of the full set (or as many pairs as the layout has room for).
+   * `hardness` 0..1: among 6 candidate deals of the seed, 0 takes the one with the most open matches at the start,
+   * 1 the one with the fewest.
+   */
+  static deal(slots: Slot[], seed: number, hardness = 0): Game {
+    const cands: Game[] = [];
+    for (let k = 0; k < 6; k++) cands.push(Game.dealOne(slots, k === 0 ? seed : (seed ^ Math.imul(k, 0x9e3779b1)) >>> 0));
+    const scored = cands.map((g) => ({ g, open: g.openMatches().length })).sort((a, b) => b.open - a.open);
+    return scored[Math.round(Math.max(0, Math.min(1, hardness)) * (scored.length - 1))].g;
+  }
+
+  private static dealOne(slots: Slot[], seed: number): Game {
     const g = geometry(slots);
     const rng = mulberry32(seed);
     const want = Math.floor(slots.length / 2);
