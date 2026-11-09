@@ -24,6 +24,7 @@ export class GameAudio {
   private musicOn = true;
   private soundOn = true;
   private adMuted = false;
+  private platformMuted = false;
   private hidden = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private nextBarAt = 0;
@@ -75,6 +76,11 @@ export class GameAudio {
     this.soundOn = on;
     this.apply();
   }
+  /** the portal's own mute setting (e.g. CrazyGames muteAudio): silence everything while it is on */
+  setPlatformMuted(m: boolean) {
+    this.platformMuted = m;
+    this.apply();
+  }
   /** portal ad playing: silence everything; afterwards the player's own settings come back */
   setAdMuted(m: boolean) {
     this.adMuted = m;
@@ -84,7 +90,7 @@ export class GameAudio {
   private apply() {
     const c = this.ctx;
     if (!c) return;
-    const silent = this.adMuted || this.hidden;
+    const silent = this.adMuted || this.hidden || this.platformMuted;
     const now = c.currentTime;
     this.master.gain.cancelScheduledValues(now);
     this.master.gain.setTargetAtTime(silent ? 0 : 1, now, 0.05);
@@ -175,7 +181,7 @@ export class GameAudio {
   /** `combo` (0..5): quick successive matches climb the scale, which feels rewarding */
   play(s: Sfx, combo = 0) {
     const c = this.ctx;
-    if (!c || !this.soundOn || this.adMuted) return;
+    if (!c || !this.soundOn || this.adMuted || this.platformMuted) return;
     const t = c.currentTime + 0.005;
     const k = Math.max(0, Math.min(5, combo));
     switch (s) {

@@ -95,7 +95,8 @@ class App {
     this.fresh = q.has('fresh');
     this.save = this.fresh ? loadSave({ getItem: () => null, setItem: () => {} }) : loadSave();
     const ql = q.get('lang');
-    setLang(ql === 'fr' || ql === 'en' ? ql : (this.save.lang ?? detectLang()));
+    const portalLang = (sdk.locale() ?? '').toLowerCase();
+    setLang(ql === 'fr' || ql === 'en' ? ql : (this.save.lang ?? (portalLang ? (portalLang.startsWith('fr') ? 'fr' : 'en') : detectLang())));
     this.fx = document.createElement('canvas');
     this.fx.id = 'fx';
     this.bg.after(this.fx);
@@ -110,7 +111,11 @@ class App {
     sdk.onAdPause = (p) => {
       this.adPaused = p;
       audio.setAdMuted(p);
+      this.syncGameplay();
     };
+    // the portal's mute setting
+    audio.setPlatformMuted(sdk.muted);
+    sdk.onMute = (m) => audio.setPlatformMuted(m);
     const unlock = () => audio.unlock();
     addEventListener('pointerdown', unlock, { capture: true });
     addEventListener('keydown', unlock, { capture: true });
@@ -118,6 +123,7 @@ class App {
     addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.persist(true);
+      this.syncGameplay();
     });
     addEventListener('pagehide', () => this.persist(true));
     setInterval(() => this.tick(), 1000);
@@ -298,8 +304,10 @@ class App {
     // pre-roll interstitial: only from this click, once per session
     if (!this.prerollDone) {
       this.prerollDone = true;
-      this.lastAdAt = Date.now();
-      await sdk.interstitial('preroll');
+      if (sdk.adSlot('preroll')) {
+        this.lastAdAt = Date.now();
+        await sdk.interstitial('preroll');
+      }
     }
     const cur = this.save.current;
     if (cur && cur.mode === 'journey') this.resumeBoard(cur);
@@ -385,7 +393,7 @@ class App {
     this.view.setGame(p.gameObj);
     this.updateHud();
     this.persist();
-    sdk.gameplayStart();
+    this.syncGameplay();
     if (!this.save.tutorialDone && p.mode === 'journey') this.startTutorial();
     else if (p.gameObj.stuck) this.openStuck();
   }
@@ -443,11 +451,10 @@ class App {
   }
 
   private leaveBoard() {
-    if (this.play) {
-      this.persist(true);
-      sdk.gameplayStop();
-    }
+    if (this.play) this.persist(true);
     this.play = null;
+    // menus are not gameplay
+    sdk.gameplayStop();
   }
 
   private updateHud() {
@@ -656,6 +663,17 @@ class App {
 
   // ------------------------------------------------------------ dialogs
 
+  /**
+   * Tell the portal whether the player is actually playing: on a board, with no dialog, result screen or ad on top,
+   * the tab visible. Called whenever any of these change; the platform de-duplicates.
+   */
+  private syncGameplay() {
+    const p = this.play;
+    const active = this.screen === 'board' && !!p && !p.gameObj.won && !this.modal && !this.adPaused && !document.hidden;
+    if (active) sdk.gameplayStart();
+    else sdk.gameplayStop();
+  }
+
   private openModal(): HTMLElement {
     this.closeModal();
     const back = el('div', 'backdrop');
@@ -664,6 +682,7 @@ class App {
     back.append(panel);
     this.ui.append(back);
     this.modal = back;
+    this.syncGameplay();
     if (this.tutEl) this.tutEl.style.visibility = 'hidden';
     return panel;
   }
@@ -671,6 +690,7 @@ class App {
   private closeModal() {
     this.modal?.remove();
     this.modal = null;
+    this.syncGameplay();
     if (this.tutEl) this.tutEl.style.visibility = '';
   }
 
@@ -931,7 +951,7 @@ class App {
     const p = this.play;
     if (!p || !p.gameObj.won || this.modal) return;
     audio.play('win');
-    sdk.gameplayStop();
+    sdk.happytime();
     const tiles = p.gameObj.total;
     const stars = starsFor(tiles, p.time, p.hints);
     const timeBonus = Math.max(0, Math.round(tiles * 4 - p.time));
@@ -1045,7 +1065,7 @@ class App {
    * least 3 boards, and at most one per ~2 minutes
    */
   private async between(go: () => void) {
-    if (this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
+    if (sdk.adSlot('between') && this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
       this.lastAdAt = Date.now();
       await sdk.interstitial('between');
     }
@@ -1358,13 +1378,17 @@ class App {
     this.resize();
     this.showTitle();
     document.body.dataset.ready = '1';
+    sdk.loadingStop();
   }
 }
 
 let app: App | null = null;
 export async function startApp() {
   // the portal SDK loads in the background; the game never waits for it
-  void sdk.init();
+  // portals that keep the save (CrazyGames Data Module) are initialised first (never longer than ~3 s)
+  if (sdk.initBeforeStart) await sdk.init();
+  else void sdk.init();
+  sdk.loadingStart();
   app = new App();
   (window as unknown as { __mjg: unknown }).__mjg = app.debug();
   await app.start();

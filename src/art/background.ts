@@ -143,6 +143,8 @@ function inkHills(ctx: CanvasRenderingContext2D, W: number, H: number, s: number
 
 export interface BackgroundOptions {
   lanterns?: boolean;
+  /** the bamboo at the left edge */
+  bamboo?: boolean;
 }
 
 /** full background (felt + edge details); `s` scales the details to the screen */
@@ -150,7 +152,7 @@ export function drawBackground(ctx: CanvasRenderingContext2D, W: number, H: numb
   drawFelt(ctx, W, H);
   const s = Math.min(Math.max(W, H) * 0.62, Math.min(W, H) * 1.35);
   inkHills(ctx, W, H, s);
-  bambooGrove(ctx, H, s);
+  if (o.bamboo !== false) bambooGrove(ctx, H, s);
   plumBranch(ctx, W, s);
   if (o.lanterns !== false) {
     const lx = W * 0.5 < s * 0.5 ? s * 0.2 : s * 0.24;

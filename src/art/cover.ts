@@ -75,7 +75,32 @@ function fan(ctx: CanvasRenderingContext2D, cx: number, cy: number, tw: number) 
   });
 }
 
-export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tagline: string | null = 'Classic tile solitaire in a quiet garden') {
+/** the round garden window (a glimpse of the restored spring garden) */
+function gardenWindow(ctx: CanvasRenderingContext2D, gx: number, gy: number, r: number, lw: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(gx, gy, r, 0, Math.PI * 2);
+  ctx.clip();
+  drawGarden(ctx, gx - r * 1.6, gy - r, r * 3.2, r * 2, { season: 0, restored: 16 });
+  ctx.restore();
+  ctx.strokeStyle = '#d2a64a';
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.arc(gx, gy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(210,166,74,0.4)';
+  ctx.lineWidth = lw * 0.4;
+  ctx.beginPath();
+  ctx.arc(gx, gy, r * 1.04, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+export interface CoverOptions {
+  /** keep the top-left corner free of art and text (CrazyGames puts its label there) */
+  clearTopLeft?: boolean;
+}
+
+export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tagline: string | null = 'Classic tile solitaire in a quiet garden', o: CoverOptions = {}) {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.round(W * dpr);
   canvas.height = Math.round(H * dpr);
@@ -83,35 +108,24 @@ export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tag
   canvas.style.height = H + 'px';
   const ctx = canvas.getContext('2d')!;
   ctx.scale(dpr, dpr);
-  drawBackground(ctx, W, H);
+  drawBackground(ctx, W, H, o.clearTopLeft ? { lanterns: false, bamboo: false } : {});
   const tiny = H < 200;
   const wide = !tiny && W / H > 1.6;
+  const tall = H / W >= 1.2;
   if (wide) {
     // a glimpse of the garden through a round window on the right
-    const r = H * 0.36;
-    const gx = W * 0.71;
-    const gy = H * 0.5;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(gx, gy, r, 0, Math.PI * 2);
-    ctx.clip();
-    drawGarden(ctx, gx - r * 1.6, gy - r, r * 3.2, r * 2, { season: 0, restored: 16 });
-    ctx.restore();
-    ctx.strokeStyle = '#d2a64a';
-    ctx.lineWidth = H * 0.008;
-    ctx.beginPath();
-    ctx.arc(gx, gy, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(210,166,74,0.4)';
-    ctx.lineWidth = H * 0.003;
-    ctx.beginPath();
-    ctx.arc(gx, gy, r * 1.04, 0, Math.PI * 2);
-    ctx.stroke();
+    gardenWindow(ctx, W * 0.71, H * 0.5, H * 0.36, H * 0.008);
     fan(ctx, W * 0.29, H * 0.36, Math.round(H * 0.085));
     logo(ctx, W * 0.29, H * 0.66, Math.min(H * 0.19, W * 0.1), tagline);
   } else if (tiny) {
     // very small thumbnails: the logo alone, as large as it can be
     logo(ctx, W / 2, H * 0.66, Math.min(W * 0.24, H * 0.36), null);
+  } else if (tall) {
+    // portrait cover: tiles, logo, and the garden window below
+    fan(ctx, W / 2, H * 0.2, Math.round(Math.min(W * 0.16, H * 0.1)));
+    logo(ctx, W / 2, H * 0.44, Math.min(W * 0.24, H * 0.16), tagline);
+    const r = Math.min(W * 0.4, H * 0.2);
+    gardenWindow(ctx, W / 2, H * 0.76, r, W * 0.012);
   } else {
     fan(ctx, W / 2, H * 0.3, Math.round(Math.min(W * 0.16, H * 0.12)));
     logo(ctx, W / 2, H * 0.66, Math.min(W * 0.24, H * 0.22), tagline);

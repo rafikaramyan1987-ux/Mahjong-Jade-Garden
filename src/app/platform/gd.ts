@@ -46,7 +46,20 @@ export class GDPlatform implements Platform {
   readonly name = 'gd';
   private adPaused = false;
   private pending: Pending | null = null;
+  readonly initBeforeStart = false;
+  readonly muted = false;
+  onMute: (m: boolean) => void = () => {};
   onAdPause: (paused: boolean) => void = () => {};
+  locale() {
+    return null;
+  }
+  loadingStart() {}
+  loadingStop() {}
+  happytime() {}
+  /** GD: pre-roll on Play and interstitials between boards */
+  adSlot(_slot: AdSlot) {
+    return true;
+  }
 
   constructor(private readonly gameId = GD_GAME_ID) {}
 

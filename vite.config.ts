@@ -2,14 +2,14 @@ import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 /** Portals this game can be built for; add a name here plus an implementation in src/app/platform/. */
-const PLATFORMS = ['web', 'gd'] as const;
+const PLATFORMS = ['web', 'gd', 'crazygames'] as const;
 type PlatformName = (typeof PLATFORMS)[number];
 
 /** GameDistribution game id (replace the placeholder with the id from the GD developer dashboard). */
 const GD_GAME_ID = process.env.GD_GAME_ID || 'TODO_GD_GAME_ID';
 
 /**
- * Build target portal: `VITE_PLATFORM=web|gd`, or `--mode gd`; default `web` (GitHub Pages, self-hosting).
+ * Build target portal: `VITE_PLATFORM=web|gd|crazygames`, or `--mode gd` / `--mode crazygames`; default `web` (GitHub Pages, self-hosting).
  * The web build goes to dist/, the others to dist-<platform>/.
  */
 function platformFor(mode: string): PlatformName {

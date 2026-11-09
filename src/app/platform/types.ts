@@ -2,10 +2,11 @@
  * The platform layer: everything the game needs from a web-game portal (ads, pause/mute events, saves).
  * One implementation per portal, chosen at build time (`__PLATFORM__`, see vite.config.ts). To add a portal
  * (e.g. Samsung Instant Plays), add its name to PLATFORMS in vite.config.ts, implement `Platform` and register it
- * in src/app/sdk.ts.
+ * in src/app/sdk.ts. The game's own ad rules (never before the 3rd board, at most one per ~2 minutes) live in
+ * app.ts and apply to every portal.
  */
 
-export type PlatformName = 'web' | 'gd';
+export type PlatformName = 'web' | 'gd' | 'crazygames';
 
 /**
  * Where an interstitial may be requested. All are outside play and follow a user input:
@@ -23,12 +24,27 @@ export interface Platform {
   readonly name: PlatformName;
   /** load / init the portal SDK; never throws, never blocks longer than about `timeoutMs` */
   init(timeoutMs?: number): Promise<void>;
+  /** wait for init() before the game reads its save (the portal stores the save) */
+  readonly initBeforeStart: boolean;
+  /** the portal's mute setting (true = keep all audio off) and a listener for changes */
+  readonly muted: boolean;
+  onMute: (muted: boolean) => void;
+  /** the portal's language for the player, e.g. "fr-FR" (null = unknown) */
+  locale(): string | null;
+  /** the game is loading its assets (shown on the portal) */
+  loadingStart(): void;
+  loadingStop(): void;
+  /** a moment of joy (a board was solved) */
+  happytime(): void;
+  /** does this portal show interstitials in this slot at all */
+  adSlot(slot: AdSlot): boolean;
   /** an ad SDK is loaded and can be asked for ads */
   readonly available: boolean;
   /** an ad started (true) / ended (false): pause the game and mute all audio / resume and restore audio */
   onAdPause: (paused: boolean) => void;
   /** portal storage, or null for localStorage */
   data(): KeyValueStore | null;
+  /** the player is actually playing (not in a menu, a dialog, a result screen or an ad); calls are de-duplicated */
   gameplayStart(): void;
   gameplayStop(): void;
   /** interstitial. Resolves once the ad is done, skipped, failed or timed out. */
