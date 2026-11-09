@@ -44,7 +44,7 @@ const state = (page: Page) => page.evaluate(() => window.__mjg.state());
 test('GD_OPTIONS uses the build game id and the SDK script is loaded once', async ({ page }) => {
   await boot(page);
   const info = await page.evaluate(() => ({ id: window.GD_OPTIONS?.gameId, n: document.querySelectorAll('script[src*="gamedistribution"]').length }));
-  expect(info.id).toBe('TODO_GD_GAME_ID');
+  expect(info.id).toBe('2708776451364ee68eca7c869f5371e0');
   expect(info.n).toBe(1);
 });
 

@@ -100,7 +100,7 @@ node scripts/record.mjs # gameplay recordings -> docs/media
   shuffle / undo, or a rewarded Continue when stuck. Mid-roll interstitials are rate-limited to one per ~2 minutes
   (the pre-roll counts). No coins, no shop: monetization is ads only. Every ad request settles exactly once (completion, error / cancel, or nothing started within 8 s).
   If the SDK cannot load, the game stays fully playable. The game id is a build constant:
-  `GD_GAME_ID=<id> npm run build:gd` (placeholder `TODO_GD_GAME_ID`).
+  `2708776451364ee68eca7c869f5371e0` (set in `vite.config.ts`, GD build only; `GD_GAME_ID=<id>` overrides it).
 
 To add a portal (e.g. Samsung Instant Plays): add its name to `PLATFORMS` in `vite.config.ts`, implement
 `Platform` and register it in `src/app/sdk.ts`.

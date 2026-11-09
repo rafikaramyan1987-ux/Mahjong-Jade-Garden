@@ -31,6 +31,13 @@ jobs:
           ! grep -q html5.api.gamedistribution.com dist-crazygames/index.html
           ! grep -q html5.api.gamedistribution.com dist/index.html
           ! grep -q sdk.crazygames.com dist/index.html
+      - name: GameDistribution zip (game id, index.html at the root, GD SDK once, no CrazyGames SDK)
+        run: |
+          # the committed submission zip
+          node scripts/check-gd-zip.mjs submission-gd/mahjong-jade-garden-gd-v1.zip
+          # and a zip made the same way from this commit's GD build
+          (cd dist-gd && zip -q -X -9 ../gd-ci.zip index.html)
+          node scripts/check-gd-zip.mjs gd-ci.zip
       - name: Layout audit + playtest bot (every journey and daily deal solver-verified, portrait tiles >= 34 px)
         run: npm run audit
       - uses: actions/upload-artifact@v6

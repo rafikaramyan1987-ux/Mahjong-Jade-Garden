@@ -5,8 +5,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 const PLATFORMS = ['web', 'gd', 'crazygames'] as const;
 type PlatformName = (typeof PLATFORMS)[number];
 
-/** GameDistribution game id (replace the placeholder with the id from the GD developer dashboard). */
-const GD_GAME_ID = process.env.GD_GAME_ID || 'TODO_GD_GAME_ID';
+/** GameDistribution game id of Mahjong Jade Garden (can be overridden with GD_GAME_ID=... for testing) */
+const GD_GAME_ID = process.env.GD_GAME_ID || '2708776451364ee68eca7c869f5371e0';
 
 /**
  * Build target portal: `VITE_PLATFORM=web|gd|crazygames`, or `--mode gd` / `--mode crazygames`; default `web` (GitHub Pages, self-hosting).
@@ -23,7 +23,8 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     plugins: [viteSingleFile()],
-    define: { __PLATFORM__: JSON.stringify(platform), __GD_GAME_ID__: JSON.stringify(GD_GAME_ID) },
+    // the GD game id goes into the GD build only
+    define: { __PLATFORM__: JSON.stringify(platform), __GD_GAME_ID__: JSON.stringify(platform === 'gd' ? GD_GAME_ID : '') },
     build: {
       target: 'es2020',
       outDir: platform === 'web' ? 'dist' : `dist-${platform}`,
