@@ -4,8 +4,7 @@
 **Thumbnails (JPG, rendered by the game):** `thumb-512x384.jpg`, `thumb-512x512.jpg`, `thumb-200x120.jpg`,
 `thumb-1280x720.jpg`, `thumb-1280x550.jpg`
 **Screenshots:** `screenshots/` (1920x1080 landscape, 1080x1920 portrait)
-**Game ID:** set at build time — `GD_GAME_ID=<id> npm run submission:gd` (the build currently carries the placeholder
-`TODO_GD_GAME_ID`; rebuild with the real ID before uploading).
+**Game ID:** `2708776451364ee68eca7c869f5371e0` (built into the GD build only; checked in CI). Rebuild with `npm run submission:gd`.
 
 ## Name
 

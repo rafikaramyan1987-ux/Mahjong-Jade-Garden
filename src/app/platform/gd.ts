@@ -12,7 +12,7 @@ import { AD_TIMEOUT, loadScript, type AdSlot, type Platform } from './types';
 
 declare const __GD_GAME_ID__: string;
 
-export const GD_GAME_ID: string = typeof __GD_GAME_ID__ === 'string' ? __GD_GAME_ID__ : 'TODO_GD_GAME_ID';
+export const GD_GAME_ID: string = typeof __GD_GAME_ID__ === 'string' ? __GD_GAME_ID__ : '';
 export const GD_SDK_URL = 'https://html5.api.gamedistribution.com/main.min.js';
 export const GD_SCRIPT_ID = 'gamedistribution-jssdk';
 /** a rewarded ad that closed without SDK_REWARDED_WATCH_COMPLETE gets this long for a late event (ms) */

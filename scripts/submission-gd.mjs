@@ -17,6 +17,8 @@ execFileSync('zip', ['-j', '-X', '-9', ZIP, 'dist-gd/index.html']);
 const listing = execFileSync('unzip', ['-Z1', ZIP]).toString().trim().split('\n');
 if (listing.length !== 1 || listing[0] !== 'index.html') throw new Error('zip must hold index.html at its root: ' + listing);
 console.log(`wrote ${ZIP} (${(statSync(ZIP).size / 1024).toFixed(0)} KB): ${listing.join(', ')}`);
+// game id, SDK once, no other portal's code
+execFileSync('node', ['scripts/check-gd-zip.mjs', ZIP], { stdio: 'inherit' });
 
 // thumbnails from the real game's cover renderer, at the exact sizes GD asks for
 const { url, close } = await serve(4183, 'gd');
@@ -33,6 +35,7 @@ for (const [w, h] of sizes) {
   // block the portal SDK while rendering art
   await p.route('https://html5.api.gamedistribution.com/**', (r) => r.abort());
   const small = w < 400;
+  // the game's own cover art (no portal label or branding)
   await p.goto(`${url}?shot=cover${small ? '&notag' : ''}`);
   await p.waitForSelector('body[data-ready="1"]');
   await p.waitForTimeout(300);
