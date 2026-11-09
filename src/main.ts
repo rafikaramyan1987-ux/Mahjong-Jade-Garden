@@ -5,9 +5,12 @@ import '@fontsource/source-sans-3/latin-600.css';
 import '@fontsource/source-sans-3/latin-700.css';
 import './ui/style.css';
 import { loadTileFont } from './art/tileArt';
+import { gpxLoading } from './app/platform/gamepixLoading';
 
 async function boot() {
   const q = new URLSearchParams(location.search);
+  // GamePix build: boot progress for the Player and the loading screen (index.html)
+  if (__PLATFORM__ === 'gamepix') gpxLoading(10);
   await Promise.all([loadTileFont(), document.fonts.load('600 20px Lora'), document.fonts.load('700 20px "Source Sans 3"'), document.fonts.load('400 20px "Source Sans 3"'), document.fonts.load('700 20px Lora')]);
   const shot = q.get('shot');
   if (shot === 'tiles' || shot === 'tiles-classic' || shot === 'tiles-contrast') {
@@ -32,7 +35,9 @@ async function boot() {
     document.body.dataset.ready = '1';
     return;
   }
+  if (__PLATFORM__ === 'gamepix') gpxLoading(50);
   const { startApp } = await import('./app/app');
+  if (__PLATFORM__ === 'gamepix') gpxLoading(80);
   await startApp();
 }
 void boot();

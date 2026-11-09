@@ -1245,6 +1245,155 @@ export const GARDEN_TILES: { name: string; draw: (ctx: C) => void }[] = [
   { name: 'red panda', draw: redPanda },
 ];
 
+// ---------------------------------------------------------------- GamePix build: neutral garden pictures
+// GamePix does not allow religious symbols. These pictures replace the ones that can be read that way (lotus on
+// its pad, the pagoda with its spire, the temple-style bell, the crescent moon with stars, the cross-like
+// four-petal stamp on the mooncake). They are only used in the GamePix build (see the block below).
+
+const tulip = (ctx: C) => {
+  curve(ctx, [50, 120, 48, 96, 50, 70], INK, 8);
+  curve(ctx, [50, 120, 48, 96, 50, 70], '#43a047', 4);
+  leafShape(ctx, 50, 116, 40, -1.05, '#43a047', 0.32);
+  leafShape(ctx, 49, 112, 36, Math.PI + 1.0, '#66bb6a', 0.32);
+  // the cup: three pointed petals on top
+  ctx.beginPath();
+  ctx.moveTo(26, 30);
+  ctx.quadraticCurveTo(22, 72, 50, 80);
+  ctx.quadraticCurveTo(78, 72, 74, 30);
+  ctx.lineTo(62, 44);
+  ctx.lineTo(50, 24);
+  ctx.lineTo(38, 44);
+  ctx.closePath();
+  setBox(22, 24, 78, 80);
+  fs(ctx, '#ff3d5a');
+  curve(ctx, [38, 44, 40, 68, 50, 78], 'rgba(150,20,40,0.55)', 2);
+  curve(ctx, [62, 44, 60, 68, 50, 78], 'rgba(150,20,40,0.55)', 2);
+  shine(ctx, 34, 50, 4, 10, 0.15);
+};
+
+const bonsai = (ctx: C) => {
+  // pot
+  rr(ctx, 18, 98, 64, 8, 3);
+  fs(ctx, '#1e88e5');
+  poly(ctx, [24, 106, 76, 106, 70, 122, 30, 122]);
+  fs(ctx, '#1565c0');
+  // twisted trunk
+  curve(ctx, [50, 100, 34, 84, 46, 70, 58, 58, 52, 42], INK, 11);
+  curve(ctx, [50, 100, 34, 84, 46, 70, 58, 58, 52, 42], '#8d5a2b', 7);
+  curve(ctx, [48, 72, 62, 70, 72, 60], INK, 7);
+  curve(ctx, [48, 72, 62, 70, 72, 60], '#8d5a2b', 3.5);
+  // foliage pads
+  ell(ctx, 28, 62, 20, 11);
+  fs(ctx, '#43a047');
+  ell(ctx, 74, 54, 20, 11);
+  fs(ctx, '#2e7d32');
+  ell(ctx, 50, 32, 24, 13);
+  fs(ctx, '#66bb6a');
+  shine(ctx, 42, 28, 7, 3, -0.2);
+};
+
+const wateringCan = (ctx: C) => {
+  ctx.save();
+  // the spout and its drops stay inside the face
+  ctx.translate(-9, 0);
+  // handle over the top
+  ctx.beginPath();
+  ctx.arc(46, 60, 20, Math.PI, Math.PI * 2);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 10;
+  ctx.stroke();
+  ctx.strokeStyle = '#ff8a3d';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  // spout with its rose
+  poly(ctx, [66, 80, 88, 50, 94, 56, 70, 96]);
+  fs(ctx, '#ff8a3d');
+  ell(ctx, 92, 50, 6, 9, 0.75);
+  fs(ctx, '#ffb74d', 2.4);
+  // body
+  rr(ctx, 18, 60, 52, 52, 8);
+  fs(ctx, '#ff8a3d');
+  line(ctx, [20, 74, 68, 74], 'rgba(150,60,10,0.45)', 2);
+  shine(ctx, 30, 84, 4, 12, 0);
+  // drops
+  dot(ctx, 96, 70, 3.4, '#29b6f6');
+  dot(ctx, 90, 82, 3, '#29b6f6');
+  dot(ctx, 100, 86, 2.6, '#29b6f6');
+  ctx.restore();
+};
+
+const snail = (ctx: C) => {
+  // body
+  ctx.beginPath();
+  ctx.moveTo(12, 108);
+  ctx.quadraticCurveTo(14, 96, 40, 96);
+  ctx.lineTo(70, 96);
+  ctx.quadraticCurveTo(76, 70, 82, 64);
+  ctx.quadraticCurveTo(96, 62, 92, 84);
+  ctx.quadraticCurveTo(90, 108, 70, 110);
+  ctx.lineTo(16, 112);
+  ctx.closePath();
+  setBox(12, 62, 96, 112);
+  fs(ctx, '#c5e15a');
+  // eye stalks
+  line(ctx, [82, 68, 76, 46], INK, 3);
+  line(ctx, [88, 68, 94, 46], INK, 3);
+  dot(ctx, 76, 44, 5, INK);
+  dot(ctx, 94, 44, 5, INK);
+  dot(ctx, 75, 42, 1.8, '#ffffff');
+  dot(ctx, 93, 42, 1.8, '#ffffff');
+  curve(ctx, [80, 84, 86, 90, 90, 84], INK, 2);
+  // shell with a spiral
+  circle(ctx, 44, 72, 30);
+  fs(ctx, '#ab47bc');
+  ctx.beginPath();
+  for (let k = 0; k <= 60; k++) {
+    const a = k * 0.21;
+    const r = 25 - k * 0.38;
+    const x = 44 + Math.cos(a) * r;
+    const y = 72 + Math.sin(a) * r;
+    if (k) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  }
+  ctx.strokeStyle = '#6a1b9a';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  shine(ctx, 32, 56, 7, 4, -0.6);
+};
+
+/** the mooncake with a neutral stamp (a ring of dots instead of the four-petal cross-like flower) */
+const mooncakeRing = (ctx: C) => {
+  ctx.beginPath();
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    const x = 50 + Math.cos(a) * 36;
+    const y = 68 + Math.sin(a) * 36;
+    ctx.moveTo(x + 7, y);
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+  }
+  fs(ctx, '#c98a3c', 2);
+  circle(ctx, 50, 68, 36);
+  fs(ctx, '#e0a85a');
+  circle(ctx, 50, 68, 24);
+  fs(ctx, '#d39445', 2);
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    circle(ctx, 50 + Math.cos(a) * 15, 68 + Math.sin(a) * 15, 3.2);
+    fs(ctx, '#e8b56a', 1.4);
+  }
+  circle(ctx, 50, 68, 7);
+  fs(ctx, '#e8b56a', 1.6);
+  shine(ctx, 34, 52, 6, 3, -0.6);
+};
+
+if (__PLATFORM__ === 'gamepix') {
+  GARDEN_TILES[1] = { name: 'tulip', draw: tulip };
+  GARDEN_TILES[16] = { name: 'bonsai', draw: bonsai };
+  GARDEN_TILES[21] = { name: 'mooncake', draw: mooncakeRing };
+  GARDEN_TILES[26] = { name: 'watering can', draw: wateringCan };
+  GARDEN_TILES[32] = { name: 'snail', draw: snail };
+}
+
 /** draw a Garden picture into the 100 x 134 face box (slightly enlarged: pictures fill the tile) */
 export function drawGardenFace(ctx: C, face: number) {
   const t = GARDEN_TILES[face];

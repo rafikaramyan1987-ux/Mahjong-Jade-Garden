@@ -74,10 +74,13 @@ npm run lint && npm run typecheck && npm test
 npm run build          # web build  -> dist/index.html     (GitHub Pages)
 npm run build:gd       # GD build   -> dist-gd/index.html  (VITE_PLATFORM=gd also works)
 npm run build:crazygames # CrazyGames build -> dist-crazygames/index.html (VITE_PLATFORM=crazygames)
+npm run build:gamepix  # GamePix build -> dist-gamepix/index.html (VITE_PLATFORM=gamepix; neutral art, see below)
 npm run test:e2e       # Playwright smoke tests on the web build (1280x720 and 390x844, portrait tile size)
 npm run test:e2e:gd    # the GD build with a mocked SDK (ad rules, rewards, no-SDK fallback)
 npm run test:e2e:cg    # the CrazyGames build with a mocked SDK v3 (lifecycle, ads, Data Module, no-SDK fallback)
 npm run audit          # layout audit + playtest bot -> docs/audit.md (CI fails on any unsolvable deal)
+npm run audit:gamepix  # the same audit on the GamePix build's board shapes
+npm run submission:gamepix # submission-gamepix/: zip, icon, cover, gameplay video (GamePix SDK local simulator)
 npm run submission:gd  # submission-gd/: zip (index.html at the root), JPG thumbnails, screenshots
 npm run submission:crazygames # submission/: zip (folder/index.html), covers, <= 20 s trailers
 node scripts/art.mjs   # store / review images from the real game -> docs/art
@@ -101,6 +104,15 @@ node scripts/record.mjs # gameplay recordings -> docs/media
   (the pre-roll counts). No coins, no shop: monetization is ads only. Every ad request settles exactly once (completion, error / cancel, or nothing started within 8 s).
   If the SDK cannot load, the game stays fully playable. The game id is a build constant:
   `2708776451364ee68eca7c869f5371e0` (set in `vite.config.ts`, GD build only; `GD_GAME_ID=<id>` overrides it).
+- `gamepix` — GamePix JS SDK v3 (`--mode gamepix`): the SDK `<script src>` with `lifecycle: 'manual'` is added to
+  index.html in this build only, with a loading bar. `lifecycle.loading()` while booting, `await loaded()` before the
+  menu, `gameStart()` once at the first board; `pause` / `resume` stop the clock, block input and mute / restore audio;
+  interstitials between boards only (no pre-roll), rewarded extras granted only on `success === true`;
+  `happyMoment('level_complete')`, `sadMoment('game_over')` at a real dead end; language from `GamePix.lang()`.
+  GamePix allows no religious symbols, so this build alone swaps a few pictures for neutral garden ones (lotus ->
+  tulip, pagoda -> bonsai, bell -> watering can, crescent moon -> snail, mooncake stamp, Classic lotus -> camellia;
+  garden: stone lantern -> bench, pagoda -> willow, lotus -> water lilies; the cross-shaped board -> Lily Pad). All of
+  it is behind `__PLATFORM__ === 'gamepix'` checks, so the other builds are byte-for-byte unchanged.
 
 To add a portal (e.g. Samsung Instant Plays): add its name to `PLATFORMS` in `vite.config.ts`, implement
 `Platform` and register it in `src/app/sdk.ts`.

@@ -22,6 +22,12 @@ export interface BoardLayout {
 
 const ell = (u: number, v: number, rx = 0.5, ry = 0.5) => ((u - 0.5) / rx) ** 2 + ((v - 0.5) / ry) ** 2;
 
+/** the GamePix build (also when an audit sets globalThis.__PLATFORM__ = 'gamepix'); false in every other build */
+const GAMEPIX = typeof __PLATFORM__ !== 'undefined' && __PLATFORM__ === 'gamepix';
+
+/** GamePix build: a round lily pad with a notch toward the top (replaces the cross-shaped "lotus" board) */
+export const lilyPad: Mask = (u, v) => ell(u, v, 0.53, 0.53) <= 1 && !(v < 0.5 && Math.abs(u - 0.5) < (0.5 - v) * 0.45);
+
 interface Shape {
   family: string;
   mask: Mask;
@@ -60,7 +66,8 @@ export const SHAPES: Shape[] = [
   { family: 'pavilion', mask: (u, v) => (v < 0.45 ? Math.abs(u - 0.5) <= 0.12 + v * 0.95 : Math.abs(u - 0.5) <= 0.4), stack: 'mixed' },
   { family: 'cascade', mask: (u, v) => Math.abs(v - u) <= 0.42, stack: 'offset' },
   { family: 'maple', mask: (u, v) => Math.abs(u - 0.5) + Math.abs(v - 0.5) <= 0.58, stack: 'aligned' },
-  { family: 'lotus', mask: (u, v) => Math.abs(u - 0.5) <= 0.2 || Math.abs(v - 0.5) <= 0.2 || ell(u, v, 0.3, 0.3) <= 1, stack: 'mixed' },
+  // GamePix build: a lily pad (a round pad with its notch) instead of the cross-shaped board
+  { family: 'lotus', mask: GAMEPIX ? lilyPad : (u, v) => Math.abs(u - 0.5) <= 0.2 || Math.abs(v - 0.5) <= 0.2 || ell(u, v, 0.3, 0.3) <= 1, stack: 'mixed' },
   { family: 'cranes', mask: (u, v, a) => (a >= 1 ? Math.abs(v - (0.15 + Math.abs(u - 0.5) * 1.4)) <= 0.36 : Math.abs(u - (0.15 + Math.abs(v - 0.5) * 1.4)) <= 0.36), stack: 'offset' },
   {
     family: 'turtle',

@@ -756,6 +756,8 @@ class App {
         }),
       );
     else {
+      // a real dead end (no pairs, no shuffle left): GamePix tracks it as a sad moment
+      if (__PLATFORM__ === 'gamepix') sdk.sadMoment?.('game_over');
       panel.append(el('p', '', t('stuck.noShuffle')));
       // rewarded "Continue": the remaining tiles are shuffled into a solvable position (no shuffle used)
       const label = sdk.name === 'web' ? `${ICONS.shuffle}<span>${t('btn.continueFree')}</span>` : `${ICONS.play}<span>${t('ad.continue')}</span>`;

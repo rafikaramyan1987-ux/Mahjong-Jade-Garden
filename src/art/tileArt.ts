@@ -517,13 +517,45 @@ function summer(ctx: C, p: Palette) {
   }
 }
 
+/**
+ * GamePix build: a camellia instead of the lotus (summer) flower, which can be read as a religious symbol.
+ * Only used in the GamePix build (drawBonus).
+ */
+function camellia(ctx: C, p: Palette) {
+  const pink = p === CONTRAST ? p.red : p.pink;
+  branch(ctx, [50, 112, 48, 92, 50, 70], p.brown, 3);
+  leaf(ctx, 49, 92, 30, -0.5, p.green, 0.34);
+  leaf(ctx, 49, 98, 28, Math.PI + 0.45, p.green, 0.34);
+  ctx.save();
+  ctx.translate(50, 52);
+  for (let ring = 0; ring < 2; ring++) {
+    const n = 6;
+    const r = ring ? 12 : 21;
+    ctx.fillStyle = ring ? lighten(pink, 0.35) : pink;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + ring * 0.5;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, r * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = p.gold;
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 4, Math.sin(a) * 4, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawBonus(ctx: C, face: number, p: Palette) {
   const n = rankOf(face);
   ctx.save();
   ctx.translate(50, 67);
   ctx.scale(1.12, 1.12);
   ctx.translate(-50, -62);
-  [plum, orchid, chrysanthemum, summer][n - 1](ctx, p);
+  (__PLATFORM__ === 'gamepix' ? [plum, orchid, chrysanthemum, camellia] : [plum, orchid, chrysanthemum, summer])[n - 1](ctx, p);
   ctx.restore();
 }
 
