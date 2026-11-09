@@ -73,10 +73,13 @@ npm run dev            # http://localhost:5173  (?fresh = ignore the save, ?seed
 npm run lint && npm run typecheck && npm test
 npm run build          # web build  -> dist/index.html     (GitHub Pages)
 npm run build:gd       # GD build   -> dist-gd/index.html  (VITE_PLATFORM=gd also works)
+npm run build:crazygames # CrazyGames build -> dist-crazygames/index.html (VITE_PLATFORM=crazygames)
 npm run test:e2e       # Playwright smoke tests on the web build (1280x720 and 390x844, portrait tile size)
 npm run test:e2e:gd    # the GD build with a mocked SDK (ad rules, rewards, no-SDK fallback)
+npm run test:e2e:cg    # the CrazyGames build with a mocked SDK v3 (lifecycle, ads, Data Module, no-SDK fallback)
 npm run audit          # layout audit + playtest bot -> docs/audit.md (CI fails on any unsolvable deal)
 npm run submission:gd  # submission-gd/: zip (index.html at the root), JPG thumbnails, screenshots
+npm run submission:crazygames # submission/: zip (folder/index.html), covers, <= 20 s trailers
 node scripts/art.mjs   # store / review images from the real game -> docs/art
 node scripts/record.mjs # gameplay recordings -> docs/media
 ```
@@ -87,6 +90,9 @@ node scripts/record.mjs # gameplay recordings -> docs/media
 (`__PLATFORM__`, see `vite.config.ts`); the bundler drops the others.
 
 - `web` — no SDK, no ads (optional extras are free).
+- `crazygames` — CrazyGames SDK v3: loading / gameplay events around real play only, happytime on a solved board,
+  midgame ads between boards only (no pre-roll), rewarded extras, Data Module saves, the platform mute setting and
+  language. Each build bundles only its own SDK (checked in CI).
 - `gd` — GameDistribution HTML5 SDK: `window.GD_OPTIONS = { gameId, onEvent }`, `main.min.js` loaded once while
   the game loads. `SDK_GAME_PAUSE` pauses and mutes, `SDK_GAME_START` resumes and restores the audio settings,
   `SDK_REWARDED_WATCH_COMPLETE` grants the reward. Interstitials only on user input outside play (Play = pre-roll,

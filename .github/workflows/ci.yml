@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -21,26 +21,31 @@ jobs:
       - name: Unit tests (rules, solvable deals, solver)
         run: npm test
       - run: npm run build
-      - name: GameDistribution build (GD SDK only in the GD build)
+      - name: Portal builds (each build contains only its own SDK)
         run: |
           npm run build:gd
+          npm run build:crazygames
           grep -q html5.api.gamedistribution.com dist-gd/index.html
+          ! grep -q sdk.crazygames.com dist-gd/index.html
+          grep -q sdk.crazygames.com dist-crazygames/index.html
+          ! grep -q html5.api.gamedistribution.com dist-crazygames/index.html
           ! grep -q html5.api.gamedistribution.com dist/index.html
+          ! grep -q sdk.crazygames.com dist/index.html
       - name: Layout audit + playtest bot (every journey and daily deal solver-verified, portrait tiles >= 34 px)
         run: npm run audit
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: audit
           path: docs/audit.md
       - name: Single-file build size (< 5 MB)
-        run: test $(stat -c%s dist/index.html) -lt 5000000 && test $(stat -c%s dist-gd/index.html) -lt 5000000
+        run: for f in dist dist-gd dist-crazygames; do test $(stat -c%s $f/index.html) -lt 5000000; done
 
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -51,3 +56,6 @@ jobs:
       - run: npm run build:gd
       - name: e2e of the GD build with a mocked SDK (ad rules, rewards, no-SDK fallback)
         run: npm run test:e2e:gd
+      - run: npm run build:crazygames
+      - name: e2e of the CrazyGames build with a mocked SDK v3
+        run: npm run test:e2e:cg

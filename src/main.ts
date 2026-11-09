@@ -18,7 +18,7 @@ async function boot() {
   }
   if (shot === 'cover') {
     const { renderCover } = await import('./art/cover');
-    renderCover(document.getElementById('bg') as HTMLCanvasElement, innerWidth, innerHeight, q.has('notag') ? null : undefined);
+    renderCover(document.getElementById('bg') as HTMLCanvasElement, innerWidth, innerHeight, q.has('notag') ? null : undefined, { clearTopLeft: q.has('cg') });
     document.body.dataset.ready = '1';
     return;
   }
