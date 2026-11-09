@@ -66,3 +66,31 @@ jobs:
       - run: npm run build:crazygames
       - name: e2e of the CrazyGames build with a mocked SDK v3
         run: npm run test:e2e:cg
+
+  gamepix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:gamepix
+      - name: GamePix zip (index.html at the root, GamePix SDK once, no CrazyGames / GameDistribution code, no other URL)
+        run: |
+          # a zip made the same way as the submission zip from this commit's GamePix build
+          (cd dist-gamepix && zip -q -X -9 ../gamepix-ci.zip index.html)
+          node scripts/check-gamepix-zip.mjs gamepix-ci.zip
+          # and the committed submission zip
+          node scripts/check-gamepix-zip.mjs submission-gamepix/mahjong-jade-garden-gamepix-v1.zip
+          test $(stat -c%s dist-gamepix/index.html) -lt 5000000
+      - name: The other builds never contain the GamePix SDK
+        run: |
+          npm run build
+          npm run build:gd
+          npm run build:crazygames
+          for f in dist dist-gd dist-crazygames; do ! grep -q integration.gamepix.com $f/index.html; ! grep -q GamePixConfig $f/index.html; done
+      - name: Layout audit of the GamePix board shapes (the Lily Pad board replaces the cross-shaped one)
+        run: npm run audit:gamepix

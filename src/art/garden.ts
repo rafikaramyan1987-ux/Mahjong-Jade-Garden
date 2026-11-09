@@ -560,6 +560,103 @@ const cranes: GardenElement = {
 /** elements in restore order (board 1 restores the first, ...) */
 export const ELEMENTS: GardenElement[] = [stoneLantern, path, pond, bridge, blossomTree, koi, pagoda, bamboo, moonGate, pavilion, lotus, waterfall, maple, lanterns, pine, cranes];
 export const ELEMENTS_PER_SEASON = ELEMENTS.length;
+// ---------------------------------------------------------------- GamePix build: neutral garden pieces
+// GamePix does not allow religious symbols. In the GamePix build these take the places of the stone lantern
+// (a temple / shrine lantern), the pagoda (a Buddhist tower with its spire) and the lotus flowers.
+
+const bench: GardenElement = {
+  key: 'el.stoneLantern',
+  z: 90,
+  at: [1250, 790],
+  draw(ctx, L) {
+    const x = 1250;
+    const wood = '#8a5a34';
+    const dark = '#5e3b20';
+    ellipse(ctx, x, 862, 96, 14, 'rgba(0,0,0,0.15)');
+    // legs
+    for (const dx of [-70, 58]) {
+      poly(ctx, [x + dx, 860, x + dx + 12, 860, x + dx + 12, 806, x + dx, 806], dark);
+      poly(ctx, [x + dx, 806, x + dx + 12, 806, x + dx + 12, 740, x + dx, 740], dark);
+    }
+    // seat and back
+    poly(ctx, [x - 88, 816, x + 88, 816, x + 82, 800, x - 82, 800], wood);
+    poly(ctx, [x - 84, 780, x + 84, 780, x + 84, 766, x - 84, 766], wood);
+    poly(ctx, [x - 84, 758, x + 84, 758, x + 84, 744, x - 84, 744], wood);
+    if (L.snow) {
+      ellipse(ctx, x, 800, 84, 6, '#ffffff');
+      ellipse(ctx, x, 744, 80, 5, '#ffffff');
+    }
+  },
+};
+
+const willow: GardenElement = {
+  key: 'el.pagoda',
+  z: 20,
+  at: [1330, 330],
+  draw(ctx, L) {
+    const x = 1330;
+    const leaf = L.snow ? '#e3eaf0' : L === LOOKS[2] ? '#d4a33c' : L === LOOKS[0] ? '#9ccc65' : '#5f9e4f';
+    const leaf2 = L.snow ? '#ffffff' : L === LOOKS[2] ? '#e8bf5a' : L === LOOKS[0] ? '#b9dc84' : '#78b462';
+    poly(ctx, [x - 60, 640, x + 60, 640, x + 70, 652, x - 70, 652], 'rgba(0,0,0,0.12)');
+    trunk(ctx, [x, 646, x - 14, 520, x + 4, 420, x + 18, 330, x - 6, 270], 26, '#5a4030');
+    trunk(ctx, [x, 430, x - 50, 380, x - 90, 320], 12, '#5a4030');
+    trunk(ctx, [x + 6, 400, x + 60, 350, x + 96, 300], 12, '#5a4030');
+    canopy(ctx, x, 290, 90, [leaf, leaf2, leaf], 41);
+    // hanging strands
+    ctx.lineCap = 'round';
+    for (let k = 0; k < 24; k++) {
+      const sx = x - 150 + k * 13;
+      const sy = 250 + Math.abs(k - 12) * 6;
+      const len = 220 + ((k * 37) % 5) * 40 - Math.abs(k - 12) * 8;
+      ctx.strokeStyle = k % 2 ? leaf : leaf2;
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo(sx + (k < 12 ? -14 : 14), sy + len * 0.5, sx + (k < 12 ? -6 : 6), sy + len);
+      ctx.stroke();
+    }
+  },
+};
+
+const waterLilies: GardenElement = {
+  key: 'el.lotus',
+  z: 56,
+  at: [760, 790],
+  draw(ctx, L) {
+    const pads: [number, number, number][] = [
+      [760, 800, 30],
+      [820, 770, 22],
+      [700, 830, 24],
+      [370, 815, 22],
+    ];
+    for (const [x, y, r] of pads) {
+      ctx.fillStyle = L.snow ? '#a7b9a8' : L === LOOKS[2] ? '#8a8a3c' : '#3f8a4a';
+      ctx.beginPath();
+      ctx.ellipse(x, y, r, r * 0.38, 0, 0.3, Math.PI * 2 - 0.1);
+      ctx.lineTo(x, y);
+      ctx.fill();
+    }
+    if (L === LOOKS[3]) return;
+    // small flat flowers lying on the pads
+    for (const [x, y] of [
+      [772, 796],
+      [708, 826],
+    ]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        ellipse(ctx, x + Math.cos(a) * 9, y + Math.sin(a) * 3.6, 7, 3.4, '#fbf7ee');
+      }
+      ellipse(ctx, x, y, 5, 2.6, '#f2cd4f');
+    }
+  },
+};
+
+if (__PLATFORM__ === 'gamepix') {
+  ELEMENTS[0] = bench;
+  ELEMENTS[6] = willow;
+  ELEMENTS[10] = waterLilies;
+}
+
 
 // ---------------------------------------------------------------- scene
 

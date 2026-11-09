@@ -10,6 +10,7 @@
     "build:gd": "tsc --noEmit && vite build --mode gd",
     "build:crazygames": "tsc --noEmit && vite build --mode crazygames",
     "build:web": "npm run build",
+    "build:gamepix": "tsc --noEmit && vite build --mode gamepix",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
@@ -18,8 +19,10 @@
     "test:e2e:gd": "playwright test -c playwright.gd.config.ts --trace off",
     "test:e2e:cg": "playwright test -c playwright.cg.config.ts --trace off",
     "audit": "tsx scripts/audit.ts --strict --md docs/audit.md",
+    "audit:gamepix": "tsx --import ./scripts/gamepix-global.mjs scripts/audit.ts --strict",
     "submission:gd": "node scripts/submission-gd.mjs",
     "submission:crazygames": "node scripts/submission-cg.mjs",
+    "submission:gamepix": "node scripts/submission-gamepix.mjs",
     "art": "node scripts/art.mjs",
     "record": "node scripts/record.mjs"
   },

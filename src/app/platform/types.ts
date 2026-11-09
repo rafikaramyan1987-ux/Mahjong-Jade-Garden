@@ -6,7 +6,7 @@
  * app.ts and apply to every portal.
  */
 
-export type PlatformName = 'web' | 'gd' | 'crazygames';
+export type PlatformName = 'web' | 'gd' | 'crazygames' | 'gamepix';
 
 /**
  * Where an interstitial may be requested. All are outside play and follow a user input:
@@ -36,6 +36,8 @@ export interface Platform {
   loadingStop(): void;
   /** a moment of joy (a board was solved) */
   happytime(): void;
+  /** a sad moment (a real dead end); only portals that track it implement this */
+  sadMoment?(name: string): void;
   /** does this portal show interstitials in this slot at all */
   adSlot(slot: AdSlot): boolean;
   /** an ad SDK is loaded and can be asked for ads */

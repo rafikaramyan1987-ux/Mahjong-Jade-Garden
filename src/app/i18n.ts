@@ -327,3 +327,10 @@ export function windLetters(): readonly string[] {
   return lang === 'fr' ? ['E', 'S', 'O', 'N'] : ['E', 'S', 'W', 'N'];
 }
 export const STRINGS = { EN, FR };
+// GamePix build: names of the neutral garden pieces and board shapes that replace the ones with a possible
+// religious reading (see src/art/garden.ts, src/layouts/catalog.ts)
+if (__PLATFORM__ === 'gamepix') {
+  Object.assign(EN, { 'el.stoneLantern': 'Garden Bench', 'el.pagoda': 'Weeping Willow', 'el.lotus': 'Water Lilies', 'layout.pagoda': 'Terraces', 'layout.lotus': 'Lily Pad' });
+  Object.assign(FR, { 'el.stoneLantern': 'Banc de jardin', 'el.pagoda': 'Saule pleureur', 'el.lotus': 'Nénuphars', 'layout.pagoda': 'Terrasses', 'layout.lotus': 'Feuille de nénuphar' });
+}
+

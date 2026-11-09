@@ -1,1 +1,1 @@
-{ "extends": "./tsconfig.json", "compilerOptions": { "types": ["node", "vite/client"] }, "include": ["scripts", "tests", "playwright.config.ts", "playwright.gd.config.ts", "playwright.cg.config.ts", "vitest.config.ts", "vite.config.ts"] }
+{ "extends": "./tsconfig.json", "compilerOptions": { "types": ["node", "vite/client"] }, "include": ["src/build-env.d.ts", "scripts", "tests", "playwright.config.ts", "playwright.gd.config.ts", "playwright.cg.config.ts", "vitest.config.ts", "vite.config.ts"] }
