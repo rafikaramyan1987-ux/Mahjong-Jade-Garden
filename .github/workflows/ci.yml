@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Unit tests (rules, solvable deals, solver)
+        run: npm test
+      - run: npm run build
+      - name: GameDistribution build (GD SDK only in the GD build)
+        run: |
+          npm run build:gd
+          grep -q html5.api.gamedistribution.com dist-gd/index.html
+          ! grep -q html5.api.gamedistribution.com dist/index.html
+      - name: Single-file build size (< 5 MB)
+        run: test $(stat -c%s dist/index.html) -lt 5000000 && test $(stat -c%s dist-gd/index.html) -lt 5000000
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:e2e
