@@ -66,5 +66,7 @@ async function boot() {
   await startApp();
   bootProgress(100);
   setTimeout(() => document.getElementById('boot')?.remove(), 600);
+  // Playgama: Bridge's game_ready once the loading screen has faded out (body[data-ready], 0.35 s) and the player can play
+  if (__PLATFORM__ === 'playgama') setTimeout(() => void import('./app/sdk').then(({ sdk }) => sdk.gameReady?.()), 500);
 }
 void boot();

@@ -36,7 +36,7 @@ export const LANG_NAMES: Record<Lang, string> = {
 
 export const STRINGS: Record<Lang, Partial<Record<StrKey, string>>> = { en, fr, de, it, es, pt, nl, pl, tr, ru };
 
-/** names that the GamePix build replaces (neutral garden pieces and board shapes, see src/art/garden.ts) */
+/** names that the GamePix and Playgama builds replace (neutral garden pieces and board shapes, see src/art/garden.ts) */
 const GPX_KEYS = new Set<string>(['el.stoneLantern', 'el.pagoda', 'el.lotus', 'layout.pagoda', 'layout.lotus']);
 
 export const isLang = (l: unknown): l is Lang => typeof l === 'string' && (LANGS as readonly string[]).includes(l);
@@ -75,7 +75,7 @@ export function getLang(): Lang {
 }
 
 export function t(k: StrKey, vars?: Record<string, string | number>): string {
-  const key = (__PLATFORM__ === 'gamepix' && GPX_KEYS.has(k) ? `gpx.${k}` : k) as StrKey;
+  const key = ((__PLATFORM__ === 'gamepix' || __PLATFORM__ === 'playgama') && GPX_KEYS.has(k) ? `gpx.${k}` : k) as StrKey;
   let s = STRINGS[lang][key] ?? (en as Record<string, string>)[key] ?? k;
   if (vars) for (const [a, b] of Object.entries(vars)) s = s.split(`{${a}}`).join(String(b));
   return s;

@@ -1386,7 +1386,8 @@ const mooncakeRing = (ctx: C) => {
   shine(ctx, 34, 52, 6, 3, -0.6);
 };
 
-if (__PLATFORM__ === 'gamepix') {
+// GamePix and Playgama builds: neutral pictures instead of religious-looking ones
+if (__PLATFORM__ === 'gamepix' || __PLATFORM__ === 'playgama') {
   GARDEN_TILES[1] = { name: 'tulip', draw: tulip };
   GARDEN_TILES[16] = { name: 'bonsai', draw: bonsai };
   GARDEN_TILES[21] = { name: 'mooncake', draw: mooncakeRing };

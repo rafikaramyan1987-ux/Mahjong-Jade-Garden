@@ -62,7 +62,7 @@ export interface SaveData {
   current: BoardInProgress | null;
 }
 
-const KEY = 'mahjongjadegarden.save.v1';
+export const SAVE_KEY = 'mahjongjadegarden.save.v1';
 
 export function defaultSave(): SaveData {
   return {
@@ -131,6 +131,8 @@ const memStore: Storage = { getItem: (k) => memory.get(k) ?? null, setItem: (k, 
 export function storage(): Storage {
   const data = sdk.data();
   if (data) return data;
+  // Playgama: progress goes only through Bridge Storage; without Bridge the game plays on with an in-memory save
+  if (__PLATFORM__ === 'playgama') return memStore;
   try {
     const ls = window.localStorage;
     ls.setItem('__mjg', '1');
@@ -143,7 +145,7 @@ export function storage(): Storage {
 
 export function loadSave(st: Storage = storage()): SaveData {
   try {
-    return parseSave(st.getItem(KEY));
+    return parseSave(st.getItem(SAVE_KEY));
   } catch {
     return defaultSave();
   }
@@ -151,10 +153,10 @@ export function loadSave(st: Storage = storage()): SaveData {
 
 export function saveNow(data: SaveData, st: Storage = storage()) {
   try {
-    st.setItem(KEY, JSON.stringify(data));
+    st.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
     try {
-      memStore.setItem(KEY, JSON.stringify(data));
+      memStore.setItem(SAVE_KEY, JSON.stringify(data));
     } catch {
       /* keep playing */
     }

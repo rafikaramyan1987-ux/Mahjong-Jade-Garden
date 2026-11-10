@@ -27,6 +27,8 @@ export const MIDGAME_GAP = 120_000;
 /** between-board interstitials only once this many boards have been cleared */
 export const ADS_AFTER_BOARDS = 3;
 const NO_AD_MS = 2500;
+/** Playgama (2.2.4): boards whose dead end was already rescued by a rewarded shuffle (offered once per board) */
+const adRescued = new WeakSet<object>();
 /** matches within this many ms of each other build a combo */
 export const COMBO_WINDOW = 3000;
 /** the combo multiplier stops growing here */
@@ -151,7 +153,8 @@ class App {
     this.fresh = q.has('fresh');
     this.save = this.fresh ? loadSave({ getItem: () => null, setItem: () => {} }) : loadSave();
     const ql = q.get('lang');
-    setLang(isLang(ql) ? ql : pickLang(this.save.lang, sdk.locale(), browserLangs()));
+    // Playgama: the language comes from Bridge (platform.language), else English; a language picked in Settings wins
+    setLang(isLang(ql) ? ql : pickLang(this.save.lang, sdk.locale(), __PLATFORM__ === 'playgama' ? [] : browserLangs()));
     this.fx = document.createElement('canvas');
     this.fx.id = 'fx';
     this.bg.after(this.fx);
@@ -579,7 +582,8 @@ class App {
     // a count while some are left; a TV and "+1" (rewarded ad) once they run out
     const badge = (b: HTMLButtonElement, left: number) => {
       const e = b.querySelector('.badge') as HTMLElement;
-      e.innerHTML = left > 0 ? String(left) : `${sdk.name === 'web' ? '' : ICONS.tv}+1`;
+      // Playgama without rewarded ads (Bridge isRewardedSupported false): no "+1" offer, the count just stays at 0
+      e.innerHTML = left > 0 ? String(left) : __PLATFORM__ === 'playgama' && !sdk.available ? '0' : `${sdk.name === 'web' ? '' : ICONS.tv}+1`;
       e.classList.toggle('plus', left <= 0);
       b.dataset.out = String(left <= 0);
     };
@@ -811,6 +815,8 @@ class App {
   }
 
   private offerExtra(kind: 'hint' | 'shuffle' | 'undo') {
+    // Playgama: the rewarded buttons are hidden where Bridge has no rewarded ads
+    if (__PLATFORM__ === 'playgama' && !sdk.available) return;
     const panel = this.openModal();
     panel.dataset.testid = `offer-${kind}`;
     const title: Record<typeof kind, StrKey> = { hint: 'ad.outHint', shuffle: 'ad.outShuffle', undo: 'ad.outUndo' };
@@ -947,11 +953,12 @@ class App {
       });
       b.dataset.testid = 'stuck-shuffle';
       panel.append(b);
-    } else {
+    } else if (__PLATFORM__ !== 'playgama' || (sdk.available && !adRescued.has(p))) {
       // a real dead end (no pairs, no shuffle left): GamePix tracks it as a sad moment
       if (__PLATFORM__ === 'gamepix') sdk.sadMoment?.('game_over');
       const b = this.adButton(this.rewardLabel(ICONS.shuffle, 'ad.oneShuffle'), () => {
         this.closeModal();
+        if (__PLATFORM__ === 'playgama') adRescued.add(p);
         this.doShuffle(false);
       });
       b.dataset.testid = 'reward-continue';
@@ -1169,6 +1176,8 @@ class App {
     this.endTutorial(true);
     audio.play('win');
     sdk.happytime();
+    // Playgama: Bridge's level_completed
+    if (__PLATFORM__ === 'playgama') sdk.levelEnd?.(true);
     const tiles = p.gameObj.total;
     const comboSecs = p.comboSecs ?? 0;
     const stars = starsFor(tiles, p.time, comboSecs);

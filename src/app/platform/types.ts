@@ -6,7 +6,7 @@
  * app.ts and apply to every portal.
  */
 
-export type PlatformName = 'web' | 'gd' | 'crazygames' | 'gamepix';
+export type PlatformName = 'web' | 'gd' | 'crazygames' | 'gamepix' | 'playgama';
 
 /**
  * Where an interstitial may be requested. All are outside play and follow a user input:
@@ -38,6 +38,10 @@ export interface Platform {
   happytime(): void;
   /** a sad moment (a real dead end); only portals that track it implement this */
   sadMoment?(name: string): void;
+  /** Playgama only: the loading screen is gone and the player can play (Bridge `game_ready`) */
+  gameReady?(): void;
+  /** Playgama only: a board ended on its result screen (Bridge `level_completed` / `level_failed`) */
+  levelEnd?(won: boolean): void;
   /** does this portal show interstitials in this slot at all */
   adSlot(slot: AdSlot): boolean;
   /** an ad SDK is loaded and can be asked for ads */

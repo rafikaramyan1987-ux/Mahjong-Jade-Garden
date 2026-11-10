@@ -141,3 +141,70 @@ jobs:
           for f in dist dist-gd dist-crazygames; do ! grep -q integration.gamepix.com $f/index.html; ! grep -q GamePixConfig $f/index.html; done
       - name: Layout audit of the GamePix board shapes (the Lily Pad board replaces the cross-shaped one)
         run: npm run audit:gamepix
+
+  web:
+    # open portals (itch.io, Newgrounds, Y8, Playgama): the ad-free web build as a zip with index.html at the root
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Web build + zip
+        run: npm run build:web && node scripts/web/zip.mjs ci-web/mahjong-jade-garden-web.zip
+      - name: Web zip checks (index.html at the root, no crazygames / gamedistribution / gamepix / googlesyndication, no http(s) request at runtime, iframe 640x480 / 960x600 / 1280x720 / 390x844, board 1 played)
+        run: node scripts/web/check.mjs ci-web/mahjong-jade-garden-web.zip --shots ci-web/checks
+      - name: Committed zip (submission-web/mahjong-jade-garden-web-v1.zip) passes the same file checks
+        run: node scripts/web/check.mjs submission-web/mahjong-jade-garden-web-v1.zip --static
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: web-zip-checks
+          path: ci-web/
+
+  playgama:
+    # Playgama: the build with Playgama Bridge 2.4.1 (vendor/playgama-bridge/) as a zip with index.html at the root
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Playgama build
+        run: npm run build:playgama
+      - name: Playgama build uses the GamePix-safe art (no religious-looking motifs; same swap as the GamePix build)
+        run: |
+          # the neutral pictures the safe set swaps in (src/art/gardenTiles.ts) are compiled into the Playgama and GamePix builds only
+          npm run build:gamepix
+          for m in '"tulip"' '"bonsai"' '"watering can"' '"snail"'; do
+            grep -qF "$m" dist-playgama/index.html || { echo "dist-playgama/index.html: safe tile $m missing"; exit 1; }
+            grep -qF "$m" dist-gamepix/index.html || { echo "dist-gamepix/index.html: safe tile $m missing"; exit 1; }
+          done
+          npm run build
+          for m in '"tulip"' '"bonsai"' '"watering can"' '"snail"'; do
+            if grep -qF "$m" dist/index.html; then echo "dist/index.html (standard art) unexpectedly has $m: the marker check is meaningless"; exit 1; fi
+          done
+          echo "OK: the Playgama build uses the safe tile set"
+      - name: Playgama zip checks (index.html at the root, Bridge script referenced first in <head>, pinned Bridge build, no crazygames / gamedistribution / gamepix, Playgama's precheck)
+        run: node scripts/playgama/zip.mjs ci-playgama/mahjong-jade-garden-playgama.zip && node scripts/playgama/check.mjs ci-playgama/mahjong-jade-garden-playgama.zip
+      - name: Committed zip (submission-playgama/mahjong-jade-garden-playgama-v1.zip) passes the same checks
+        run: node scripts/playgama/check.mjs submission-playgama/mahjong-jade-garden-playgama-v1.zip
+      - name: Bridge test (mock platform + stubbed Playgama SDK; interstitial, rewarded completed / cancelled, muted during ads)
+        run: node scripts/playgama/test.mjs ci-playgama/mahjong-jade-garden-playgama.zip
+      - name: Vendored Bridge = official v2.4.1 standalone playgama build (rebuilt from the tag)
+        run: bash scripts/playgama/build-bridge.sh
+      - name: The other builds never contain Playgama Bridge
+        run: |
+          npm run build
+          npm run build:gd
+          npm run build:crazygames
+          npm run build:gamepix
+          for f in dist dist-gd dist-crazygames dist-gamepix; do if grep -q playgama-bridge $f/index.html || test -e $f/playgama-bridge.js; then echo "$f has Playgama Bridge"; exit 1; fi; done
