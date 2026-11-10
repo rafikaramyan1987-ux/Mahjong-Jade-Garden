@@ -1,6 +1,6 @@
 // GamePix submission: node scripts/submission-gamepix.mjs   (runs `npm run build:gamepix` first)
-// -> submission-gamepix/mahjong-jade-garden-gamepix-v2.zip  (index.html at the root of the zip, single-file build;
-//    the v1 zip is kept)
+// -> submission-gamepix/mahjong-jade-garden-gamepix-v3.zip  (index.html at the root of the zip, single-file build;
+//    the v1 and v2 zips are kept)
 // -> submission-gamepix/icon-256x256.jpg, cover-1360x850.jpg  (the game's own cover renderer, GamePix art)
 // -> submission-gamepix/gameplay-gamepix-1280x720.mp4  (start, one board, a rewarded ad, the local fake interstitial;
 //    the real GamePix SDK in its local simulation mode, so it needs integration.gamepix.com)
@@ -12,7 +12,7 @@ import { chromium } from 'playwright';
 import { serve } from './serve.mjs';
 
 const OUT = 'submission-gamepix';
-const ZIP = `${OUT}/mahjong-jade-garden-gamepix-v2.zip`;
+const ZIP = `${OUT}/mahjong-jade-garden-gamepix-v3.zip`;
 mkdirSync(OUT, { recursive: true });
 execFileSync('npm', ['run', 'build:gamepix'], { stdio: 'inherit' });
 

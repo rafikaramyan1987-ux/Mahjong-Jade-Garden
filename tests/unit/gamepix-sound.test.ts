@@ -154,6 +154,162 @@ describe('GamePix soundOff / soundOn', () => {
   });
 });
 
+describe('GamePix legacy properties (GamePix.soundOff / soundOn / pause / resume) next to the events', () => {
+  type Sig = 'pause' | 'resume' | 'soundOff' | 'soundOn';
+  type Src = 'event' | 'legacy';
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as unknown as { window?: unknown }).window;
+  });
+
+  async function boot() {
+    const s = await setup();
+    const mutes: boolean[] = [];
+    const inner = s.gp.onMute;
+    s.gp.onMute = (m) => (mutes.push(m), inner(m));
+    const fire = (sig: Sig, src: Src) => (src === 'event' ? s.f.emit(sig) : s.f.sdk[sig]!());
+    return { ...s, mutes, fire };
+  }
+
+  it('assigns all four legacy properties on the SDK, pointing to working handlers', async () => {
+    const { f, audio, pauses } = await boot();
+    for (const k of ['soundOff', 'soundOn', 'pause', 'resume'] as const) expect(typeof f.sdk[k]).toBe('function');
+    f.sdk.soundOff!();
+    expect(audio.gate().silent).toBe(true);
+    f.sdk.soundOn!();
+    f.sdk.pause!();
+    f.sdk.resume!();
+    expect(pauses).toEqual([true, false]);
+    expect(audio.gate()).toMatchObject({ silent: false, music: true, sfx: true, suspend: false });
+  });
+
+  const orders: [Src, Src][] = [
+    ['event', 'legacy'],
+    ['legacy', 'event'],
+    ['event', 'event'],
+    ['legacy', 'legacy'],
+  ];
+  for (const sameTick of [true, false]) {
+    for (const [a, b] of orders) {
+      it(`each signal fired twice (${a} then ${b}, ${sameTick ? 'same tick' : 'separate ticks'}): one transition each`, async () => {
+        const { audio, pauses, mutes, fire } = await boot();
+        const twice = async (sig: Sig) => {
+          fire(sig, a);
+          if (!sameTick) await vi.advanceTimersByTimeAsync(0);
+          fire(sig, b);
+          await vi.advanceTimersByTimeAsync(0);
+        };
+        await twice('soundOff');
+        expect(mutes).toEqual([true]);
+        expect(audio.gate()).toMatchObject({ silent: true, suspend: false });
+        await twice('pause');
+        expect(pauses).toEqual([true]);
+        // the Player's sound back while still paused: still silent
+        await twice('soundOn');
+        expect(mutes).toEqual([true, false]);
+        expect(audio.gate()).toMatchObject({ silent: true, sfx: false, suspend: true });
+        await twice('resume');
+        expect(pauses).toEqual([true, false]);
+        expect(audio.gate()).toMatchObject({ silent: false, music: true, sfx: true, suspend: false });
+      });
+    }
+  }
+
+  it('interleaved event and legacy calls in one tick', async () => {
+    const { audio, pauses, mutes, fire } = await boot();
+    fire('soundOff', 'event');
+    fire('pause', 'legacy');
+    fire('soundOff', 'legacy');
+    fire('pause', 'event');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mutes).toEqual([true]);
+    expect(pauses).toEqual([true]);
+    fire('resume', 'legacy');
+    fire('soundOn', 'event');
+    fire('resume', 'event');
+    fire('soundOn', 'legacy');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mutes).toEqual([true, false]);
+    expect(pauses).toEqual([true, false]);
+    expect(audio.gate()).toMatchObject({ silent: false, music: true, sfx: true, suspend: false });
+  });
+
+  it('pause twice and resume once: resumed', async () => {
+    const { audio, pauses, fire } = await boot();
+    fire('pause', 'event');
+    await vi.advanceTimersByTimeAsync(0);
+    fire('pause', 'legacy');
+    await vi.advanceTimersByTimeAsync(0);
+    fire('resume', 'legacy');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pauses).toEqual([true, false]);
+    expect(audio.gate().suspend).toBe(false);
+  });
+
+  for (const [a, b] of orders) {
+    it(`an ad whose pause comes through both (${a}, ${b}) never leaves the game paused`, async () => {
+      for (const sdkResumes of [false, true]) {
+        const { f, gp, audio, pauses, fire } = await boot();
+        const r = gp.rewarded();
+        fire('pause', a);
+        fire('pause', b);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(pauses).toEqual([true]);
+        if (sdkResumes) {
+          fire('resume', a);
+          fire('resume', b);
+        }
+        f.answer({ success: true });
+        expect(await r).toBe(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(pauses).toEqual([true, false]);
+        expect(audio.gate()).toMatchObject({ silent: false, suspend: false });
+      }
+    });
+  }
+});
+
+describe('GamePix language', () => {
+  afterEach(() => {
+    delete (globalThis as unknown as { window?: unknown }).window;
+  });
+
+  it('GamePix.lang() is called once, in init() before loaded(), and its value is the locale', async () => {
+    const order: string[] = [];
+    const lang = vi.fn(() => (order.push('lang'), 'de'));
+    const sdk = {
+      lang,
+      lifecycle: { loading: () => {}, loaded: () => (order.push('loaded'), Promise.resolve()), gameStart: () => {} },
+      events: { on: () => {} },
+      ads: { interstitial: () => Promise.resolve({ success: false }), reward: () => Promise.resolve({ success: false }) },
+    } as GPXSdk;
+    (globalThis as unknown as { window: unknown }).window = { GamePix: sdk };
+    const gp = new GamePixPlatform(() => sdk);
+    expect(gp.locale()).toBeNull();
+    await gp.init();
+    expect(order).toEqual(['lang', 'loaded']);
+    expect(gp.locale()).toBe('de');
+    expect(gp.locale()).toBe('de');
+    expect(lang).toHaveBeenCalledTimes(1);
+  });
+
+  it('a throwing or missing lang() leaves the locale unknown', async () => {
+    for (const l of [() => { throw new Error('x'); }, undefined]) {
+      const sdk = {
+        lang: l,
+        lifecycle: { loading: () => {}, loaded: () => Promise.resolve(), gameStart: () => {} },
+        events: { on: () => {} },
+        ads: { interstitial: () => Promise.resolve({ success: false }), reward: () => Promise.resolve({ success: false }) },
+      } as GPXSdk;
+      (globalThis as unknown as { window: unknown }).window = { GamePix: sdk };
+      const gp = new GamePixPlatform(() => sdk);
+      await gp.init();
+      expect(gp.locale()).toBeNull();
+    }
+  });
+});
+
 describe('audio gate', () => {
   it('is silent while any cause is on and follows the player settings otherwise', () => {
     const base = { music: true, sound: true, paused: false, platformMuted: false, hidden: false };

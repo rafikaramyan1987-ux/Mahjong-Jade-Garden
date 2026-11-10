@@ -9,12 +9,17 @@
  *   lifts only that mute, so audio comes back only if the player's own settings allow it and no pause or ad is on
  *   (the audio gate keeps pause, ad and platform mute as separate flags). Idempotent. Older SDKs without
  *   `events.on` get the same handlers through the legacy `GamePix.on.soundOff / soundOn` callbacks.
+ * - the same handlers are also assigned as the legacy properties `GamePix.soundOff / soundOn / pause / resume` (the
+ *   GamePix Player checks that they are declared). When the SDK calls both the event and the property for one
+ *   change, in any order, the second call of the same signal in the same tick is ignored, and every handler is
+ *   idempotent, so nothing is muted, paused or resumed twice. The assignments are written as
+ *   `window.GamePix.soundOff = ...` so the minified bundle keeps the literal text (checked by CI).
  * - interstitials (`GamePix.ads.interstitial()`) only between boards (no pre-roll on GamePix); rewarded ads
  *   (`GamePix.ads.reward()`) only from an explicit click; the reward only when `success === true`
  * - every ad request settles exactly once: the SDK's answer, a throwing call, a second concurrent request, or
  *   nothing started within AD_TIMEOUT
  * - happyMoment('level_complete') when a board is solved, sadMoment('game_over') at a real dead end
- * - language from `GamePix.lang()`; the save stays in plain localStorage (synchronised by the SDK)
+ * - language from `GamePix.lang()`, read once in init() (before loaded()) and cached; the save stays in plain localStorage (synchronised by the SDK)
  * - without the SDK (blocked, offline) the game plays on: no ads, the extras say "no ad available"
  */
 import { gpxLoading } from './gamepixLoading';
@@ -39,7 +44,14 @@ export interface GPXSdk {
   ads: { interstitial(): Promise<GPXAdResult>; reward(): Promise<GPXAdResult> };
   happyMoment?(name: string): void;
   sadMoment?(name: string): void;
+  /** legacy properties the Player checks for (assigned by the game, called by the SDK / Player) */
+  soundOff?: () => void;
+  soundOn?: () => void;
+  pause?: () => void;
+  resume?: () => void;
 }
+
+type GPXSignal = 'pause' | 'resume' | 'soundOff' | 'soundOn';
 
 declare global {
   interface Window {
@@ -67,6 +79,10 @@ export class GamePixPlatform implements Platform {
   /** the request in flight is told when the SDK pauses the game for its ad */
   private adStarted: (() => void) | null = null;
   private blocker: HTMLElement | null = null;
+  /** signals already handled in this tick (the event and the legacy property for the same change) */
+  private tick: Set<GPXSignal> | null = null;
+  /** GamePix.lang(), read once in init() */
+  private lang: string | null = null;
 
   constructor(private readonly get: () => GPXSdk | undefined = () => window.GamePix) {}
 
@@ -91,21 +107,54 @@ export class GamePixPlatform implements Platform {
   async init(timeoutMs = LOADED_TIMEOUT) {
     const s = this.s;
     if (!s) return;
+    const on: Record<GPXSignal, () => void> = {
+      pause: () => this.signal('pause', () => this.setPaused(true)),
+      resume: () => this.signal('resume', () => this.setPaused(false)),
+      soundOff: () => this.signal('soundOff', () => this.setSoundOff(true)),
+      soundOn: () => this.signal('soundOn', () => this.setSoundOff(false)),
+    };
     this.call(() => {
-      s.events.on('pause', () => this.setPaused(true));
-      s.events.on('resume', () => this.setPaused(false));
+      s.events.on('pause', on.pause);
+      s.events.on('resume', on.resume);
     });
     this.call(() => {
       if (typeof s.events?.on === 'function') {
-        s.events.on('soundOff', () => this.setSoundOff(true));
-        s.events.on('soundOn', () => this.setSoundOff(false));
+        s.events.on('soundOff', on.soundOff);
+        s.events.on('soundOn', on.soundOn);
       } else if (s.on && typeof s.on === 'object') {
         // legacy callbacks
-        s.on.pause = () => this.setPaused(true);
-        s.on.resume = () => this.setPaused(false);
-        s.on.soundOff = () => this.setSoundOff(true);
-        s.on.soundOn = () => this.setSoundOff(false);
+        s.on.pause = on.pause;
+        s.on.resume = on.resume;
+        s.on.soundOff = on.soundOff;
+        s.on.soundOn = on.soundOn;
       }
+    });
+    // legacy properties the Player checks for, the same handlers (written out in full so the minified bundle keeps
+    // the literal `GamePix.soundOff=` text)
+    this.call(() => {
+      if (typeof window !== 'undefined' && window.GamePix && window.GamePix === s) {
+        window.GamePix.soundOff = on.soundOff;
+        window.GamePix.soundOn = on.soundOn;
+        window.GamePix.pause = on.pause;
+        window.GamePix.resume = on.resume;
+      } else {
+        s.soundOff = on.soundOff;
+        s.soundOn = on.soundOn;
+        s.pause = on.pause;
+        s.resume = on.resume;
+      }
+    });
+    // the Player's language, once, before loaded() ("Language used")
+    this.call(() => {
+      const v =
+        typeof window !== 'undefined' && window.GamePix && window.GamePix === s
+          ? typeof window.GamePix.lang === 'function'
+            ? window.GamePix.lang()
+            : null
+          : typeof s.lang === 'function'
+            ? s.lang()
+            : null;
+      if (typeof v === 'string' && v) this.lang = v;
     });
     this.loading(100);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -117,6 +166,20 @@ export class GamePixPlatform implements Platform {
       clearTimeout(timer);
     }
     this.isLoaded = true;
+  }
+
+  /**
+   * one SDK signal: the event and the legacy property may both fire for the same change (either order); the second
+   * call of the same signal within one tick is a repeat and is ignored
+   */
+  private signal(name: GPXSignal, f: () => void) {
+    if (this.tick?.has(name)) return;
+    if (!this.tick) {
+      this.tick = new Set();
+      void Promise.resolve().then(() => (this.tick = null));
+    }
+    this.tick.add(name);
+    f();
   }
 
   /**
@@ -173,13 +236,9 @@ export class GamePixPlatform implements Platform {
     }
   }
 
+  /** GamePix.lang(), read once in init() (null without the SDK) */
   locale() {
-    let l: string | null = null;
-    this.call(() => {
-      const v = this.s?.lang?.();
-      if (typeof v === 'string' && v) l = v;
-    });
-    return l;
+    return this.lang;
   }
   /** plain localStorage (the SDK synchronises it) */
   data() {
