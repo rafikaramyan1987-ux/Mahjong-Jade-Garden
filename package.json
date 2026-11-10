@@ -11,6 +11,7 @@
     "build:crazygames": "tsc --noEmit && vite build --mode crazygames",
     "build:web": "npm run build",
     "build:gamepix": "tsc --noEmit && vite build --mode gamepix",
+    "build:playgama": "tsc --noEmit && vite build --mode playgama",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
@@ -27,6 +28,9 @@
     "submission:web": "npm run build:web && node scripts/web/zip.mjs",
     "check:web": "node scripts/web/check.mjs",
     "store:web": "node scripts/web/store.mjs",
+    "submission:playgama": "npm run build:playgama && node scripts/playgama/zip.mjs",
+    "check:playgama": "node scripts/playgama/check.mjs",
+    "test:playgama": "node scripts/playgama/test.mjs",
     "audio:levels": "node scripts/audio-levels.mjs --md docs/audio-levels.md --strict",
     "art": "node scripts/art.mjs",
     "record": "node scripts/record.mjs"

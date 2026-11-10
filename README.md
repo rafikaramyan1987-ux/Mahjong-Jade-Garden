@@ -104,6 +104,8 @@ npm run build          # web build  -> dist/index.html     (GitHub Pages)
 npm run build:gd       # GD build   -> dist-gd/index.html  (VITE_PLATFORM=gd also works)
 npm run build:crazygames # CrazyGames build -> dist-crazygames/index.html (VITE_PLATFORM=crazygames)
 npm run build:gamepix  # GamePix build -> dist-gamepix/index.html (VITE_PLATFORM=gamepix; neutral art, see below)
+npm run build:playgama # Playgama build -> dist-playgama/ (index.html + Playgama Bridge 2.4.1 + its config; VITE_PLATFORM=playgama)
+npm run submission:web # ad-free web zip for open portals -> submission-web/ (see submission-web/README.md)
 npm run test:e2e       # Playwright tests on the web build (1280x720 and 390x844; tutorial, combos, settings, text fit in 10 languages)
 npm run check:i18n     # every language file has every English key; the fonts cover every character
 npm run audio:levels   # loudness of every sound and both tracks -> docs/audio-levels.md (run after a build)
@@ -146,6 +148,12 @@ node scripts/record.mjs # gameplay recordings -> docs/media
   tulip, pagoda -> bonsai, bell -> watering can, crescent moon -> snail, mooncake stamp, Classic lotus -> camellia;
   garden: stone lantern -> bench, pagoda -> willow, lotus -> water lilies; the cross-shaped board -> Lily Pad). All of
   it is behind `__PLATFORM__ === 'gamepix'` checks, so the other builds are byte-for-byte unchanged.
+
+- `playgama` — Playgama Bridge 2.4.1 (`--mode playgama`, vendored in `vendor/playgama-bridge/`, loaded as the first
+  script in `<head>`): `bridge.initialize()` before the save is read, language from `platform.language`, the save in
+  Bridge Storage only (no localStorage), `game_ready` after the loading screen, interstitials between boards only,
+  rewarded extras only after Bridge's `rewarded` state (hidden when Bridge has none), pause / audio state handled.
+  Everything is behind `__PLATFORM__ === 'playgama'` checks; see submission-playgama/README.md.
 
 To add a portal (e.g. Samsung Instant Plays): add its name to `PLATFORMS` in `vite.config.ts`, implement
 `Platform` and register it in `src/app/sdk.ts`.

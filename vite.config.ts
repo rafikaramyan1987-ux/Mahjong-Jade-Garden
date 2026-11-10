@@ -1,15 +1,17 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 /** Portals this game can be built for; add a name here plus an implementation in src/app/platform/. */
-const PLATFORMS = ['web', 'gd', 'crazygames', 'gamepix'] as const;
+const PLATFORMS = ['web', 'gd', 'crazygames', 'gamepix', 'playgama'] as const;
 type PlatformName = (typeof PLATFORMS)[number];
 
 /** GameDistribution game id of Mahjong Jade Garden (can be overridden with GD_GAME_ID=... for testing) */
 const GD_GAME_ID = process.env.GD_GAME_ID || '2708776451364ee68eca7c869f5371e0';
 
 /**
- * Build target portal: `VITE_PLATFORM=web|gd|crazygames|gamepix`, or `--mode gd` / `--mode crazygames` / `--mode gamepix`;
+ * Build target portal: `VITE_PLATFORM=web|gd|crazygames|gamepix|playgama`, or `--mode gd` / `--mode crazygames` / `--mode gamepix` /
+ * `--mode playgama`;
  * default `web` (GitHub Pages, self-hosting).
  * The web build goes to dist/, the others to dist-<platform>/.
  */
@@ -56,6 +58,26 @@ function gamepixHtml(): Plugin {
 }
 
 /**
+ * Playgama build: Playgama Bridge 2.4.1 (vendor/playgama-bridge/, the official standalone `playgama` build) as
+ * `./playgama-bridge.js`, the first script in <head>, loaded normally (not async), and `playgama-bridge-config.json`
+ * beside index.html (Bridge loads it from there). The game itself stays one inlined index.html.
+ */
+function playgamaBridge(): Plugin {
+  return {
+    name: 'playgama-bridge',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler: () => [{ tag: 'script', attrs: { src: './playgama-bridge.js' }, injectTo: 'head-prepend' }],
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'playgama-bridge.js', source: readFileSync('vendor/playgama-bridge/playgama-bridge.js') });
+      this.emitFile({ type: 'asset', fileName: 'playgama-bridge-config.json', source: readFileSync('scripts/playgama/playgama-bridge-config.json') });
+    },
+  };
+}
+
+/**
  * Single-file builds: move the inlined game script (and its big inlined stylesheet with the fonts) from <head> to
  * the end of <body>, so the browser paints the small loading screen as soon as the first bytes arrive.
  */
@@ -81,7 +103,12 @@ export default defineConfig(({ mode }) => {
   const platform = platformFor(mode);
   return {
     base: './',
-    plugins: platform === 'gamepix' ? [viteSingleFile(), gamepixHtml(), scriptLast()] : [viteSingleFile(), scriptLast()],
+    plugins:
+      platform === 'gamepix'
+        ? [viteSingleFile(), gamepixHtml(), scriptLast()]
+        : platform === 'playgama'
+          ? [viteSingleFile(), playgamaBridge(), scriptLast()]
+          : [viteSingleFile(), scriptLast()],
     // the GD game id goes into the GD build only
     define: { __PLATFORM__: JSON.stringify(platform), __GD_GAME_ID__: JSON.stringify(platform === 'gd' ? GD_GAME_ID : '') },
     build: {
