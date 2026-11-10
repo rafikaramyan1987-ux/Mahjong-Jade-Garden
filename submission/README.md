@@ -14,10 +14,10 @@
 |---|---|
 | `mahjong-jade-garden-v2.zip` | **v2 upload**: unzips to `mahjong-jade-garden-v2/index.html` — one self-contained file (~560 KB, about 320 KB zipped), CrazyGames SDK v3 build. Same structure as v1 |
 | `cover-1920x1080.png`, `cover-800x1200.png`, `cover-800x800.png` | **v2 covers**, rendered by the game in its new look; title "Mahjong Jade Garden"; the top-left corner is kept clear for the CrazyGames label |
-| `trailer-1920x1080.mp4`, `trailer-1080x1920.mp4` | **v2 trailers**, about 18 s, no sound, recorded from real play: the first seconds of the tutorial, a fast combo chain, the 3-star result screen and the journey map blooming. The first frame is the cover |
+| `trailer-1920x1080.mp4`, `videos/trailer-1080x1620.mp4` | **v2 trailers** (landscape 16:9 and portrait 2:3, exactly 1080 x 1620), about 18 s, no sound, recorded from real play: the first seconds of the tutorial, a fast combo chain, the 3-star result screen and the journey map blooming. The first frame is the cover |
 | `mahjong-jade-garden-v1.zip` | the v1 upload, kept for reference |
 
-Rebuild everything with `npm run submission:crazygames` (trailers only: `npm run build && node scripts/trailer.mjs`).
+Rebuild everything with `npm run submission:crazygames` (only the zip: `node scripts/submission-cg.mjs --zip-only`; only the trailers: `npm run build && node scripts/trailer.mjs`, `-- --only portrait` for the 2:3 one).
 A 60-second recording of a brand-new player on a 390 x 844 phone: [docs/media/first-minute-v2-390x844.mp4](../docs/media/first-minute-v2-390x844.mp4).
 
 ## Short description

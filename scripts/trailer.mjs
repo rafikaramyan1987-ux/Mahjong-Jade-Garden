@@ -1,5 +1,7 @@
 // CrazyGames trailers (v2) from real play of the web build (run `npm run build` first):
-//   node scripts/trailer.mjs [outDir]  ->  trailer-1920x1080.mp4, trailer-1080x1920.mp4  (about 18 s, no sound)
+//   node scripts/trailer.mjs [outDir] [--only landscape|portrait]
+//   -> <outDir>/trailer-1920x1080.mp4 and <outDir>/videos/trailer-1080x1620.mp4 (2:3, as CrazyGames asks)
+//   (about 18 s each, no sound)
 // The first frame is the cover (rendered by the game at the trailer's size); then a brand-new player: the first
 // seconds of the tutorial (the hand, the blocked tile), a fast combo chain that clears board 1, the 3-star result
 // screen and the journey map where the restored garden element blooms.
@@ -9,7 +11,8 @@ import { chromium } from 'playwright';
 import { RIPPLE, encode, startCapture } from './capture.mjs';
 import { serve } from './serve.mjs';
 
-const out = process.argv[2] || 'submission';
+const out = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : 'submission';
+const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
 mkdirSync(out, { recursive: true });
 const { url, close } = await serve(4186);
 const browser = await chromium.launch();
@@ -23,7 +26,8 @@ async function cover(viewport, dpr, file) {
   await p.close();
 }
 
-async function trailer(name, viewport, dpr, touch) {
+async function trailer(name, viewport, dpr, touch, dir = out) {
+  mkdirSync(dir, { recursive: true });
   const W = viewport.width * dpr;
   const H = viewport.height * dpr;
   const tmp = resolve(out, '.tmp-' + name);
@@ -45,7 +49,7 @@ async function trailer(name, viewport, dpr, touch) {
   const t0 = Date.now();
   const mark = (what) => console.log(`  ${name} ${((Date.now() - t0) / 1000 + 1).toFixed(1)} s: ${what}`);
   // the hand shows the pair
-  await p.waitForTimeout(touch ? 2300 : 2700);
+  await p.waitForTimeout(touch ? 2800 : 2700);
   let pr = await p.evaluate(() => window.__mjg.pair());
   await tap(...pr[0]);
   await p.waitForTimeout(260);
@@ -74,14 +78,15 @@ async function trailer(name, viewport, dpr, touch) {
   await p.waitForSelector('[data-testid=bloom]');
   mark('journey map, the garden blooms');
   // the journey map: the new garden element blooms
-  await p.waitForTimeout(touch ? 3200 : 3600);
+  await p.waitForTimeout(touch ? 3600 : 3600);
   const frames = await cap.stop();
   await ctx.close();
-  encode(frames, { tmp, out: join(out, name + '.mp4'), W, H, still, stillSecs: 1.0, maxSecs: 18.5 });
+  encode(frames, { tmp, out: join(dir, name + '.mp4'), W, H, still, stillSecs: 1.0, maxSecs: 18.5 });
   (await import('node:fs')).rmSync(still, { force: true });
 }
 
-await trailer('trailer-1920x1080', { width: 1280, height: 720 }, 1.5, false);
-await trailer('trailer-1080x1920', { width: 540, height: 960 }, 2, true);
+if (only !== 'portrait') await trailer('trailer-1920x1080', { width: 1280, height: 720 }, 1.5, false);
+// portrait: exactly 1080 x 1620 (2:3), a 540 x 810 phone-like screen at 2x
+if (only !== 'landscape') await trailer('trailer-1080x1620', { width: 540, height: 810 }, 2, true, join(out, 'videos'));
 await browser.close();
 close();

@@ -107,7 +107,7 @@ npm run build:gamepix  # GamePix build -> dist-gamepix/index.html (VITE_PLATFORM
 npm run test:e2e       # Playwright tests on the web build (1280x720 and 390x844; tutorial, combos, settings, text fit in 10 languages)
 npm run check:i18n     # every language file has every English key; the fonts cover every character
 npm run audio:levels   # loudness of every sound and both tracks -> docs/audio-levels.md (run after a build)
-node scripts/trailer.mjs       # CrazyGames trailers (cover first, real play, ~18 s, no sound)
+node scripts/trailer.mjs       # CrazyGames trailers 1920x1080 + videos/1080x1620 (cover first, real play, ~18 s, no sound)
 node scripts/first-minute.mjs  # docs/media/first-minute-v2-390x844.mp4: the first 60 s of a new player
 npm run test:e2e:gd    # the GD build with a mocked SDK (ad rules, rewards, no-SDK fallback)
 npm run test:e2e:cg    # the CrazyGames build with a mocked SDK v3 (lifecycle, ads, Data Module, no-SDK fallback)
@@ -115,7 +115,7 @@ npm run audit          # layout audit + playtest bot -> docs/audit.md (CI fails 
 npm run audit:gamepix  # the same audit on the GamePix build's board shapes
 npm run submission:gamepix # submission-gamepix/: zip, icon, cover, gameplay video (GamePix SDK local simulator)
 npm run submission:gd  # submission-gd/: zip (index.html at the root), JPG thumbnails, screenshots
-npm run submission:crazygames # submission/: zip (folder/index.html), covers, <= 20 s trailers
+npm run submission:crazygames # submission/: zip (folder/index.html), covers, ~18 s trailers (1920x1080, videos/1080x1620)
 node scripts/art.mjs   # store / review images from the real game -> docs/art
 node scripts/record.mjs # gameplay recordings -> docs/media
 ```

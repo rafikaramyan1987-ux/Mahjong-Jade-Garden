@@ -77,6 +77,8 @@ await shot(await page(540, 960, 2, '', true), 'title-portrait-1080x1920.png');
 {
   const p = await page(1280, 720, 1.5, 'seed=21');
   await playSome(p, 2, false, 5);
+  // a realistic clock for the result screen (the test hook solves instantly)
+  await p.evaluate(() => window.__mjg.setTime(94));
   await p.evaluate(() => window.__mjg.solve());
   await p.waitForSelector('[data-testid=win]');
   await p.waitForTimeout(2600);

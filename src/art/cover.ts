@@ -157,8 +157,10 @@ export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tag
   const tall = H / W >= 1.2;
   // every layout keeps the logo and the tiles out of the top-left quarter
   if (tiny) {
+    // small thumbnails: three tiles over a compact logo
     vignette(ctx, W / 2, H * 0.55, W * 0.6, H * 0.7);
-    logo(ctx, W / 2, H * 0.66, Math.min(W * 0.24, H * 0.36), null);
+    fan(ctx, W / 2, H * 0.3, Math.round(H * 0.2), 3);
+    logo(ctx, W / 2, H * 0.84, Math.min(W * 0.2, H * 0.27), null);
   } else if (wide) {
     vignette(ctx, W * 0.5, H * 0.56, W * 0.42, H * 0.55);
     const tw = Math.round(H * 0.15);

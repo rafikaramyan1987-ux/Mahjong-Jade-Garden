@@ -52,7 +52,7 @@ close();
 
 // screenshots for the store page (rendered by scripts/art.mjs from the real game)
 mkdirSync(`${OUT}/screenshots`, { recursive: true });
-for (const f of ['gameplay-landscape-1920x1080.png', 'gameplay-portrait-1080x1920.png', 'garden-journey-spring-1920x1080.png', 'title-landscape-1920x1080.png', 'board-cleared-1920x1080.png'])
+for (const f of ['gameplay-landscape-1920x1080.png', 'gameplay-portrait-1080x1920.png', 'journey-landscape-1920x1080.png', 'garden-journey-spring-1920x1080.png', 'title-landscape-1920x1080.png', 'board-cleared-1920x1080.png'])
   try {
     copyFileSync(`docs/art/${f}`, `${OUT}/screenshots/${f}`);
   } catch {
