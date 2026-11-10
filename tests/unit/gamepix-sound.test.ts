@@ -235,6 +235,26 @@ describe('GamePix legacy properties (GamePix.soundOff / soundOn / pause / resume
     expect(audio.gate()).toMatchObject({ silent: false, music: true, sfx: true, suspend: false });
   });
 
+  it('a real toggle back and forth within one tick is not mistaken for a repeat', async () => {
+    const { audio, pauses, mutes, fire } = await boot();
+    fire('soundOff', 'event');
+    fire('soundOff', 'legacy');
+    fire('soundOn', 'legacy');
+    fire('soundOn', 'event');
+    fire('soundOff', 'legacy');
+    fire('soundOff', 'event');
+    fire('pause', 'legacy');
+    fire('pause', 'event');
+    fire('resume', 'event');
+    fire('resume', 'legacy');
+    fire('pause', 'event');
+    fire('pause', 'legacy');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mutes).toEqual([true, false, true]);
+    expect(pauses).toEqual([true, false, true]);
+    expect(audio.gate()).toMatchObject({ silent: true, suspend: true });
+  });
+
   it('pause twice and resume once: resumed', async () => {
     const { audio, pauses, fire } = await boot();
     fire('pause', 'event');

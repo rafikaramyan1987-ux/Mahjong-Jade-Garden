@@ -11,7 +11,7 @@
  *   `events.on` get the same handlers through the legacy `GamePix.on.soundOff / soundOn` callbacks.
  * - the same handlers are also assigned as the legacy properties `GamePix.soundOff / soundOn / pause / resume` (the
  *   GamePix Player checks that they are declared). When the SDK calls both the event and the property for one
- *   change, in any order, the second call of the same signal in the same tick is ignored, and every handler is
+ *   change, in any order, a repeat of the same signal in the same tick (before its opposite) is ignored, and every handler is
  *   idempotent, so nothing is muted, paused or resumed twice. The assignments are written as
  *   `window.GamePix.soundOff = ...` so the minified bundle keeps the literal text (checked by CI).
  * - interstitials (`GamePix.ads.interstitial()`) only between boards (no pre-roll on GamePix); rewarded ads
@@ -52,6 +52,7 @@ export interface GPXSdk {
 }
 
 type GPXSignal = 'pause' | 'resume' | 'soundOff' | 'soundOn';
+const OPPOSITE: Record<GPXSignal, GPXSignal> = { pause: 'resume', resume: 'pause', soundOff: 'soundOn', soundOn: 'soundOff' };
 
 declare global {
   interface Window {
@@ -170,7 +171,7 @@ export class GamePixPlatform implements Platform {
 
   /**
    * one SDK signal: the event and the legacy property may both fire for the same change (either order); the second
-   * call of the same signal within one tick is a repeat and is ignored
+   * call of the same signal within one tick, with no opposite signal in between, is a repeat and is ignored
    */
   private signal(name: GPXSignal, f: () => void) {
     if (this.tick?.has(name)) return;
@@ -179,6 +180,8 @@ export class GamePixPlatform implements Platform {
       void Promise.resolve().then(() => (this.tick = null));
     }
     this.tick.add(name);
+    // a real change back (soundOn after soundOff, resume after pause) re-arms the opposite signal
+    this.tick.delete(OPPOSITE[name]);
     f();
   }
 
