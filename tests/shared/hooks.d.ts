@@ -8,12 +8,18 @@ export interface MjgState {
   score: number | null;
   journey: number;
   tutorial: number;
-  variant: 'landscape' | 'portrait' | null;
+  variant: 'landscape' | 'portrait' | 'short' | null;
   tileWidth: number | null;
   hintsLeft: number | null;
   shufflesLeft: number | null;
   adPaused: boolean;
   undosLeft?: number;
+  tutorialDone: boolean;
+  combo: number;
+  comboSecs: number;
+  zoom: number;
+  lang: string;
+  audio: { silent: boolean; music: boolean; sfx: boolean; suspend: boolean };
 }
 export interface MjgRect {
   x: number;
@@ -31,6 +37,8 @@ declare global {
       solve(leave?: number): boolean;
       setJourney(n: number): void;
       skipTutorial(): void;
+      blocked(): [number, number] | null;
+      showTitle(): void;
       stuck(): void;
       demoProgress(n: number): void;
       showJourney(): void;

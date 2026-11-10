@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "test:e2e": "playwright test --trace off",
     "test:e2e:gd": "playwright test -c playwright.gd.config.ts --trace off",
     "test:e2e:cg": "playwright test -c playwright.cg.config.ts --trace off",
@@ -23,6 +24,7 @@
     "submission:gd": "node scripts/submission-gd.mjs",
     "submission:crazygames": "node scripts/submission-cg.mjs",
     "submission:gamepix": "node scripts/submission-gamepix.mjs",
+    "audio:levels": "node scripts/audio-levels.mjs --md docs/audio-levels.md --strict",
     "art": "node scripts/art.mjs",
     "record": "node scripts/record.mjs"
   },

@@ -740,8 +740,178 @@ export interface GardenView {
 
 let scratch: HTMLCanvasElement | null = null;
 
+// ---------------------------------------------------------------- the illustrated finish
+// Restored elements get the same finish as the tile pictures: a glossy light-to-shade sheen, a bold ink outline and
+// a soft shadow. Work happens only inside each element's box, in device pixels, so it stays fast and sharp.
+
+const INK = 'rgba(38, 30, 22, 0.92)';
+const pool: HTMLCanvasElement[] = [];
+function canvasSlot(slot: number, w: number, h: number) {
+  let c = pool[slot];
+  if (!c) c = pool[slot] = document.createElement('canvas');
+  if (c.width < w || c.height < h) {
+    c.width = Math.max(c.width, w);
+    c.height = Math.max(c.height, h);
+  }
+  return c;
+}
+
+interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+const boxes = new Map<string, Box | null>();
+/** an element's bounding box in scene units (found once per season from a small render) */
+function elementBox(e: GardenElement, i: number, season: Season): Box | null {
+  const key = `${season}:${i}`;
+  if (boxes.has(key)) return boxes.get(key)!;
+  const s = 0.125;
+  const w = Math.ceil(GW * s);
+  const h = Math.ceil(GH * s);
+  const c = canvasSlot(3, w, h);
+  const cx = c.getContext('2d', { willReadFrequently: true })!;
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  cx.clearRect(0, 0, c.width, c.height);
+  cx.setTransform(s, 0, 0, s, 0, 0);
+  e.draw(cx, LOOKS[season]);
+  const d = cx.getImageData(0, 0, w, h).data;
+  let x0 = w,
+    y0 = h,
+    x1 = -1,
+    y1 = -1;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      if (d[(y * w + x) * 4 + 3] > 6) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+  const b = x1 < 0 ? null : { x0: x0 / s - 16, y0: y0 / s - 16, x1: (x1 + 1) / s + 16, y1: (y1 + 1) / s + 16 };
+  boxes.set(key, b);
+  return b;
+}
+
+/** draw one element with the illustrated finish onto ctx (whose transform maps scene units to device pixels) */
+function drawFinished(ctx: C, e: GardenElement, i: number, season: Season, alpha = 1) {
+  const L = LOOKS[season];
+  const box = elementBox(e, i, season);
+  const m = ctx.getTransform();
+  if (!box) return;
+  const ax = m.a * box.x0 + m.e;
+  const ay = m.d * box.y0 + m.f;
+  const bx = m.a * box.x1 + m.e;
+  const by = m.d * box.y1 + m.f;
+  const rx = Math.max(0, Math.floor(ax) - 6);
+  const ry = Math.max(0, Math.floor(ay) - 6);
+  const rw = Math.min(ctx.canvas.width, Math.ceil(bx) + 6) - rx;
+  const rh = Math.min(ctx.canvas.height, Math.ceil(by) + 6) - ry;
+  if (rw <= 0 || rh <= 0) return;
+  const layer = canvasSlot(1, rw, rh);
+  const lc = layer.getContext('2d')!;
+  lc.setTransform(1, 0, 0, 1, 0, 0);
+  lc.globalCompositeOperation = 'source-over';
+  lc.globalAlpha = 1;
+  lc.clearRect(0, 0, rw, rh);
+  lc.setTransform(m.a, m.b, m.c, m.d, m.e - rx, m.f - ry);
+  e.draw(lc, L);
+  // glossy sheen: light from above, a little shade at the foot
+  lc.setTransform(1, 0, 0, 1, 0, 0);
+  lc.globalCompositeOperation = 'source-atop';
+  const top = Math.max(0, ay - ry);
+  const bot = Math.min(rh, by - ry);
+  const g = lc.createLinearGradient(0, top, 0, bot);
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.34)');
+  g.addColorStop(0.4, 'rgba(255, 255, 255, 0.06)');
+  g.addColorStop(0.58, 'rgba(255, 255, 255, 0)');
+  g.addColorStop(1, 'rgba(30, 40, 25, 0.18)');
+  lc.fillStyle = g;
+  lc.fillRect(0, 0, rw, rh);
+  lc.globalCompositeOperation = 'source-over';
+  // the ink silhouette for the outline and the shadow
+  const sil = canvasSlot(2, rw, rh);
+  const sc = sil.getContext('2d')!;
+  sc.setTransform(1, 0, 0, 1, 0, 0);
+  sc.globalCompositeOperation = 'source-over';
+  sc.clearRect(0, 0, rw, rh);
+  sc.drawImage(layer, 0, 0, rw, rh, 0, 0, rw, rh);
+  sc.globalCompositeOperation = 'source-in';
+  sc.fillStyle = INK;
+  sc.fillRect(0, 0, rw, rh);
+  sc.globalCompositeOperation = 'source-over';
+  const ro = Math.max(1, Math.min(4.5, m.a * 2.4));
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = alpha * 0.2;
+  ctx.drawImage(sil, 0, 0, rw, rh, rx + ro, ry + ro * 2.4, rw, rh);
+  ctx.globalAlpha = alpha * 0.85;
+  for (const [dx, dy] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [0.7, 0.7],
+    [-0.7, 0.7],
+    [0.7, -0.7],
+    [-0.7, -0.7],
+  ])
+    ctx.drawImage(sil, 0, 0, rw, rh, rx + dx * ro, ry + dy * ro, rw, rh);
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(layer, 0, 0, rw, rh, rx, ry, rw, rh);
+  ctx.restore();
+}
+
+/** the reveal animation repaints every frame: the scene under it and the finished element are drawn only once */
+let revealCache: { key: string; base: HTMLCanvasElement; elem: HTMLCanvasElement } | null = null;
+
 /** draw the garden scene fitted into a W x H box at (x, y) */
 export function drawGarden(ctx: C, x: number, y: number, W: number, H: number, v: GardenView) {
+  if (v.reveal && v.reveal.index < v.restored && typeof document !== 'undefined') {
+    const m = ctx.getTransform();
+    const key = [v.season, v.reveal.index, x, y, W, H, ctx.canvas.width, ctx.canvas.height, m.a, m.d, m.e, m.f].join('|');
+    if (!revealCache || revealCache.key !== key) {
+      const mk = () => {
+        const c = document.createElement('canvas');
+        c.width = ctx.canvas.width;
+        c.height = ctx.canvas.height;
+        const cx = c.getContext('2d')!;
+        cx.setTransform(m);
+        return [c, cx] as const;
+      };
+      const [base, bc] = mk();
+      drawGarden(bc, x, y, W, H, { season: v.season, restored: v.reveal.index, next: -1 });
+      const [elem, ec] = mk();
+      ec.beginPath();
+      ec.rect(x, y, W, H);
+      ec.clip();
+      const k = Math.max(W / GW, H / GH);
+      ec.translate(x + (W - GW * k) / 2, y + (H - GH * k) / 2);
+      ec.scale(k, k);
+      drawFinished(ec, ELEMENTS[v.reveal.index], v.reveal.index, v.season);
+      revealCache = { key, base, elem };
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.drawImage(revealCache.base, 0, 0);
+    // the element grows in: fades in and rises a little, with a soft scale
+    const t = Math.max(0, Math.min(1, v.reveal.t));
+    if (t > 0) {
+      const e = 1 - Math.pow(1 - t, 3);
+      ctx.globalAlpha = e;
+      const sc = 0.92 + 0.08 * e;
+      const cw = ctx.canvas.width;
+      const ch = ctx.canvas.height;
+      ctx.translate(cw / 2, ch * 0.75);
+      ctx.scale(sc, sc);
+      ctx.translate(-cw / 2, -ch * 0.75 + (1 - e) * ch * 0.03);
+      ctx.drawImage(revealCache.elem, 0, 0);
+    }
+    ctx.restore();
+    return;
+  }
   const L = LOOKS[v.season];
   const k = Math.max(W / GW, H / GH);
   // cover the box, keep the center
@@ -767,15 +937,11 @@ export function drawGarden(ctx: C, x: number, y: number, W: number, H: number, v
   const sc = scratch.getContext('2d')!;
   const order = ELEMENTS.map((e, i) => ({ e, i })).sort((a, b) => a.e.z - b.e.z);
   for (const { e, i } of order) {
-    const restored = i < v.restored;
-    const revealT = v.reveal && v.reveal.index === i ? v.reveal.t : 1;
-    if (restored && revealT >= 1) {
-      ctx.save();
-      e.draw(ctx, L);
-      ctx.restore();
+    if (i < v.restored) {
+      drawFinished(ctx, e, i, v.season);
       continue;
     }
-    // ink-wash silhouette (and, during a reveal, the colored element fading in on top)
+    // ink-wash silhouette of what is still to come
     sc.setTransform(1, 0, 0, 1, 0, 0);
     sc.globalCompositeOperation = 'source-over';
     sc.clearRect(0, 0, sw, sh);
@@ -786,15 +952,9 @@ export function drawGarden(ctx: C, x: number, y: number, W: number, H: number, v
     sc.fillStyle = 'rgba(40, 52, 48, 1)';
     sc.fillRect(0, 0, sw, sh);
     ctx.save();
-    ctx.globalAlpha = restored ? 0.2 * (1 - revealT) : 0.17;
+    ctx.globalAlpha = 0.17;
     ctx.drawImage(scratch, 0, 0, GW, GH);
     ctx.restore();
-    if (restored) {
-      ctx.save();
-      ctx.globalAlpha = revealT;
-      e.draw(ctx, L);
-      ctx.restore();
-    }
   }
   seasonParticles(ctx, v.season);
   if (v.next !== undefined && v.next >= 0 && v.next < ELEMENTS.length) {

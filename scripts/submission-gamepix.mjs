@@ -1,6 +1,7 @@
 // GamePix submission: node scripts/submission-gamepix.mjs   (runs `npm run build:gamepix` first)
-// -> submission-gamepix/mahjong-jade-garden-gamepix-v1.zip  (index.html at the root of the zip, single-file build)
-// -> submission-gamepix/icon-512x512.png, cover-1280x720.png  (the game's own cover renderer, GamePix art)
+// -> submission-gamepix/mahjong-jade-garden-gamepix-v2.zip  (index.html at the root of the zip, single-file build;
+//    the v1 zip is kept)
+// -> submission-gamepix/icon-256x256.jpg, cover-1360x850.jpg  (the game's own cover renderer, GamePix art)
 // -> submission-gamepix/gameplay-gamepix-1280x720.mp4  (start, one board, a rewarded ad, the local fake interstitial;
 //    the real GamePix SDK in its local simulation mode, so it needs integration.gamepix.com)
 // Pass --no-video to skip the recording.
@@ -11,7 +12,7 @@ import { chromium } from 'playwright';
 import { serve } from './serve.mjs';
 
 const OUT = 'submission-gamepix';
-const ZIP = `${OUT}/mahjong-jade-garden-gamepix-v1.zip`;
+const ZIP = `${OUT}/mahjong-jade-garden-gamepix-v2.zip`;
 mkdirSync(OUT, { recursive: true });
 execFileSync('npm', ['run', 'build:gamepix'], { stdio: 'inherit' });
 
@@ -26,15 +27,15 @@ const browser = await chromium.launch();
 
 // icon and cover from the game's own cover renderer (the SDK is not needed for art)
 for (const [w, h, file, q] of [
-  [512, 512, 'icon-512x512.png', '&notag'],
-  [1280, 720, 'cover-1280x720.png', ''],
+  [256, 256, 'icon-256x256.jpg', '&notag'],
+  [1360, 850, 'cover-1360x850.jpg', ''],
 ]) {
   const p = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   await p.route('https://integration.gamepix.com/**', (r) => r.abort());
   await p.goto(`${url}?shot=cover${q}`);
   await p.waitForSelector('body[data-ready="1"]');
   await p.waitForTimeout(300);
-  await p.screenshot({ path: `${OUT}/${file}` });
+  await p.screenshot({ path: `${OUT}/${file}`, ...(file.endsWith('.jpg') ? { type: 'jpeg', quality: 92 } : {}) });
   console.log('wrote', `${OUT}/${file}`);
   await p.close();
 }
@@ -77,7 +78,7 @@ if (!process.argv.includes('--no-video')) {
     return true;
   };
   // the local SDK simulation: rewarded ads succeed, interstitials show the fake ad overlay
-  await p.goto(url + '?fresh&seed=7&gpx_reward=success');
+  await p.goto(url + '?fresh&menu&seed=7&gpx_reward=success');
   await p.waitForSelector('body[data-ready="1"]');
   // three boards already cleared, so the between-board interstitial is allowed (game rule)
   await p.evaluate(() => {
@@ -107,7 +108,7 @@ if (!process.argv.includes('--no-video')) {
     const s = await p.evaluate(() => window.__mjg.state());
     if (s.modal === 'win' || !s.remaining) break;
     if (s.modal === 'stuck') {
-      await tapSel('[data-testid=stuck] .btn.primary');
+      await tapSel('[data-testid=stuck-shuffle], [data-testid=reward-continue]');
       await p.waitForTimeout(500);
       continue;
     }

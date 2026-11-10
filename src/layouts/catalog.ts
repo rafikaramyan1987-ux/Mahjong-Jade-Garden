@@ -6,7 +6,7 @@
 import { Game } from '../game/game';
 import type { Slot } from '../game/layout';
 import { hashSeed } from '../game/rng';
-import { fitShape, type Mask, type Stack } from './build';
+import { fitShape, MIN_SHORT_TILE, SHORT_FLOOR_TILE, type Mask, type Stack } from './build';
 
 export interface BoardLayout {
   id: string;
@@ -16,6 +16,8 @@ export interface BoardLayout {
   family: string;
   landscape: Slot[];
   portrait: Slot[];
+  /** for phones held sideways: few rows, more layers */
+  short: Slot[];
   /** 0..1: how hard the deal is (fewer open matches at the start) */
   hardness: number;
 }
@@ -89,10 +91,12 @@ export const JOURNEY_LENGTH = BOARDS_PER_SEASON * 4;
  * through deals with fewer open pairs (see `hardness`).
  */
 export function sizeFor(n: number) {
+  // the first three boards are small and quick (well under a minute): early wins for new players
+  if (n < 3) return { target: [16, 20, 24][n], layers: 2 };
   const season = Math.min(3, Math.floor(n / BOARDS_PER_SEASON));
   const k = (n % BOARDS_PER_SEASON) / (BOARDS_PER_SEASON - 1);
   const ranges: [number, number][] = [
-    [30, 56],
+    [26, 56],
     [56, 88],
     [84, 116],
     [112, 144],
@@ -114,8 +118,28 @@ function make(n: number): BoardLayout {
     family: shape.family,
     landscape: fitShape(shape.mask, { target, layers, stack: shape.stack, portrait: false }),
     portrait: fitShape(shape.mask, { target, layers, stack: shape.stack, portrait: true }),
+    short: fitShort(shape.mask, target, layers, shape.stack),
     hardness,
   };
+}
+
+/**
+ * The phone-landscape variant: about the same tile count as the other variants (so a board is equally hard on every
+ * screen), with tiles >= 56 px where that is possible; only the biggest boards go a little smaller (>= 44 px).
+ */
+function fitShort(mask: Mask, target: number, layers: number, stack: Stack): Slot[] {
+  const gap = Math.max(6, Math.round(target * 0.08));
+  let best: Slot[] | null = null;
+  for (let minTile = MIN_SHORT_TILE; minTile >= SHORT_FLOOR_TILE; minTile -= 2) {
+    try {
+      const slots = fitShape(mask, { target, layers, stack, portrait: false, short: true, minTile });
+      if (!best || Math.abs(slots.length - target) < Math.abs(best.length - target)) best = slots;
+      if (Math.abs(slots.length - target) <= gap) return slots;
+    } catch {
+      /* try a slightly smaller tile */
+    }
+  }
+  return best ?? fitShape(mask, { target, layers, stack, portrait: false, short: true, minTile: 30 });
 }
 
 const cache = new Map<number, BoardLayout>();
@@ -134,6 +158,12 @@ export function journeyLayouts(): BoardLayout[] {
   return Array.from({ length: JOURNEY_LENGTH }, (_, n) => built(n));
 }
 
+/** the shape family (and name key) of journey board n, without building the layout */
+export function familyAt(n: number): string {
+  const k = n < JOURNEY_LENGTH ? n : 32 + ((n - JOURNEY_LENGTH) % 32);
+  return SHAPES[k % SHAPES.length].family;
+}
+
 export function layoutAt(n: number): BoardLayout {
   // after the 64th board the journey goes on through the second half of the set
   return built(n < JOURNEY_LENGTH ? n : 32 + ((n - JOURNEY_LENGTH) % 32));
@@ -147,11 +177,17 @@ export function layoutById(id: string): BoardLayout | undefined {
   return f >= 0 && n >= 0 && n < JOURNEY_LENGTH ? built(n) : undefined;
 }
 
-export type Variant = 'landscape' | 'portrait';
+export type Variant = 'landscape' | 'portrait' | 'short';
+export const VARIANTS: Variant[] = ['landscape', 'portrait', 'short'];
+
+/** the slots of a layout variant */
+export function variantSlots(l: BoardLayout, v: Variant): Slot[] {
+  return v === 'portrait' ? l.portrait : v === 'short' ? l.short : l.landscape;
+}
 
 /** the deal of a layout: deterministic from the seed, harder layouts get harder deals */
 export function dealLayout(l: BoardLayout, variant: Variant, seed: number): Game {
-  return Game.deal(variant === 'portrait' ? l.portrait : l.landscape, seed, l.hardness);
+  return Game.deal(variantSlots(l, variant), seed, l.hardness);
 }
 
 /** seed of journey board n (the same deal for every player) */

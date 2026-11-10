@@ -5,6 +5,10 @@
  *   is shown (never longer than LOADED_TIMEOUT), `gameStart()` once, when the first board starts
  * - `pause` / `resume` events (also sent by the SDK around its ads): pause the game (clock, input) and mute all
  *   audio / resume and restore the player's own audio settings; both idempotent
+ * - `soundOff` / `soundOn` events (the Player's sound button): soundOff mutes all audio WITHOUT pausing; soundOn
+ *   lifts only that mute, so audio comes back only if the player's own settings allow it and no pause or ad is on
+ *   (the audio gate keeps pause, ad and platform mute as separate flags). Idempotent. Older SDKs without
+ *   `events.on` get the same handlers through the legacy `GamePix.on.soundOff / soundOn` callbacks.
  * - interstitials (`GamePix.ads.interstitial()`) only between boards (no pre-roll on GamePix); rewarded ads
  *   (`GamePix.ads.reward()`) only from an explicit click; the reward only when `success === true`
  * - every ad request settles exactly once: the SDK's answer, a throwing call, a second concurrent request, or
@@ -29,7 +33,9 @@ export interface GPXAdResult {
 export interface GPXSdk {
   lang?(): string;
   lifecycle: { loading(p: number): void; loaded(): Promise<unknown>; gameStart(): void };
-  events: { on(name: 'pause' | 'resume', fn: () => void): void };
+  events: { on(name: 'pause' | 'resume' | 'soundOff' | 'soundOn', fn: () => void): void };
+  /** legacy SDK callbacks (assigned by the game, called by the SDK) */
+  on?: { pause?: () => void; resume?: () => void; soundOff?: () => void; soundOn?: () => void };
   ads: { interstitial(): Promise<GPXAdResult>; reward(): Promise<GPXAdResult> };
   happyMoment?(name: string): void;
   sadMoment?(name: string): void;
@@ -45,12 +51,18 @@ declare global {
 export class GamePixPlatform implements Platform {
   readonly name = 'gamepix';
   readonly initBeforeStart = true;
-  readonly muted = false;
+  /** the Player's sound is off (soundOff) */
+  private soundOff = false;
   onMute: (m: boolean) => void = () => {};
   onAdPause: (paused: boolean) => void = () => {};
   private isLoaded = false;
   private started = false;
+  /** the game is paused (what the game was last told) */
   private paused = false;
+  /** the Player paused the game (pause / resume events outside an ad) */
+  private playerPaused = false;
+  /** an ad of ours is playing (its pause event arrived while our request was in flight) */
+  private adOn = false;
   private busy = false;
   /** the request in flight is told when the SDK pauses the game for its ad */
   private adStarted: (() => void) | null = null;
@@ -60,6 +72,11 @@ export class GamePixPlatform implements Platform {
 
   private get s() {
     return this.get();
+  }
+
+  /** the portal's mute (soundOff from the Player); the game's audio gate adds pause, ad and the player's settings */
+  get muted() {
+    return this.soundOff;
   }
 
   get available() {
@@ -78,6 +95,18 @@ export class GamePixPlatform implements Platform {
       s.events.on('pause', () => this.setPaused(true));
       s.events.on('resume', () => this.setPaused(false));
     });
+    this.call(() => {
+      if (typeof s.events?.on === 'function') {
+        s.events.on('soundOff', () => this.setSoundOff(true));
+        s.events.on('soundOn', () => this.setSoundOff(false));
+      } else if (s.on && typeof s.on === 'object') {
+        // legacy callbacks
+        s.on.pause = () => this.setPaused(true);
+        s.on.resume = () => this.setPaused(false);
+        s.on.soundOff = () => this.setSoundOff(true);
+        s.on.soundOn = () => this.setSoundOff(false);
+      }
+    });
     this.loading(100);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -90,13 +119,39 @@ export class GamePixPlatform implements Platform {
     this.isLoaded = true;
   }
 
-  /** the Player (or an ad) pauses / resumes the game. Idempotent: repeated calls change nothing. */
+  /**
+   * pause / resume events. While one of our ad requests is in flight, the first pause is that ad starting; any other
+   * pause / resume is the Player's. Idempotent: repeated events change nothing. The game stays paused while either
+   * the Player or an ad holds it.
+   */
   setPaused(p: boolean) {
-    if (p && this.adStarted) this.adStarted();
+    if (p && this.adStarted && !this.adOn) {
+      this.adOn = true;
+      this.adStarted();
+    } else if (!p && this.busy && this.adOn && !this.playerPaused) {
+      // the ad's own resume: the ad is over for the game (the request settles on the SDK's answer)
+      this.adOn = false;
+    } else this.playerPaused = p;
+    this.update();
+  }
+
+  /** tell the game when the overall pause state changes (never twice the same) */
+  private update() {
+    const p = this.playerPaused || this.adOn;
     if (this.paused === p) return;
     this.paused = p;
     this.block(p);
     this.onAdPause(p);
+  }
+
+  /**
+   * The Player's sound button. soundOff mutes all audio but does not pause the game; soundOn only lifts this mute
+   * (a pause, an ad or the player's own Music / Sounds settings still apply). Idempotent.
+   */
+  setSoundOff(off: boolean) {
+    if (this.soundOff === off) return;
+    this.soundOff = off;
+    this.onMute(off);
   }
 
   /** while paused nothing in the game takes input (the ad or the Player is on top) */
@@ -181,8 +236,9 @@ export class GamePixPlatform implements Platform {
         this.busy = false;
         this.adStarted = null;
         clearTimeout(timer);
-        // never leave the game paused by an ad that did not send resume
-        this.setPaused(false);
+        // never leave the game paused by an ad that did not send resume (a pause of the Player's own stays)
+        this.adOn = false;
+        this.update();
         res(ok);
       };
       let timer = setTimeout(() => finish(false), AD_TIMEOUT);

@@ -1,336 +1,88 @@
-import type { Lang } from './save';
+/**
+ * Texts of the game: one JSON file per language in src/i18n/ (English is the reference; CI checks that every
+ * language has every English key, `npm run check:i18n`). No text is written in the code.
+ *
+ * Language: the player's choice in Settings (saved) wins; otherwise the portal's language (CrazyGames SDK locale,
+ * GamePix.lang()), otherwise the browser language (GameDistribution, web), otherwise English.
+ */
+import de from '../i18n/de.json';
+import en from '../i18n/en.json';
+import es from '../i18n/es.json';
+import fr from '../i18n/fr.json';
+import it from '../i18n/it.json';
+import nl from '../i18n/nl.json';
+import pl from '../i18n/pl.json';
+import pt from '../i18n/pt.json';
+import ru from '../i18n/ru.json';
+import tr from '../i18n/tr.json';
 
-const EN = {
-  'title.mahjong': 'Mahjong',
-  'title.jadeGarden': 'Jade Garden',
-  'title.tagline': 'Classic tile solitaire in a quiet garden',
-  'menu.play': 'Play',
-  'menu.continue': 'Continue',
-  'menu.daily': 'Daily Challenge',
-  'menu.garden': 'Jade Garden',
-  'menu.stats': 'Statistics',
-  'menu.settings': 'Settings',
-  'menu.board': 'Board {n}',
-  'hud.matches': 'Matches',
-  'hud.time': 'Time',
-  'hud.score': 'Score',
-  'hud.tiles': 'Tiles',
-  'btn.hint': 'Hint',
-  'btn.undo': 'Undo',
-  'btn.shuffle': 'Shuffle',
-  'btn.settings': 'Settings',
-  'btn.menu': 'Menu',
-  'btn.next': 'Next board',
-  'btn.close': 'Close',
-  'btn.back': 'Back',
-  'btn.resume': 'Resume',
-  'btn.restart': 'Restart board',
-  'btn.newBoard': 'New board',
-  'btn.ok': 'Got it',
-  'btn.gotoGarden': 'See the garden',
-  'btn.resetZoom': 'Fit board',
-  'btn.watchAd': 'Watch a short ad',
-  'ad.none': 'No ad available right now, try later',
-  'ad.extraShuffle': 'Extra shuffle',
-  'ad.extraHint': 'Extra hint',
-  'ad.offer': 'Watch a short video for one more?',
-  'ad.plus': '+1 {what}',
-  'ad.watchPlus': 'Watch an ad: +1 {what}',
-  'ad.extraUndo': 'Extra undo',
-  'ad.continue': 'Watch an ad: Continue',
-  'btn.continueFree': 'Continue',
-  'menu.journey': 'Journey',
-  'journey.title': 'Journey',
-  'journey.next': 'Next',
-  'journey.locked': 'Locked',
-  'journey.season': '{season} · boards {a}–{b}',
-  'journey.done': '{n} of {total} boards finished',
-  'btn.journey': 'Journey',
-  'win.newBest': 'New best!',
-  'win.bestTime': 'Best time',
-  'daily.streak': '{n} days in a row',
-  'daily.keep': 'Keep your {n}-day streak going today',
-  'daily.new': 'A new board every day',
-  'medal.gold': 'Gold medal',
-  'medal.silver': 'Silver medal',
-  'medal.bronze': 'Bronze medal',
-  'medal.rule': 'Gold under {g} · Silver under {s}',
-  'win.personalBest': 'Personal best today',
-  'stats.bestDaily': 'Best daily time',
-  'stats.longest': 'Longest daily streak',
-  'stats.medals': 'Daily medals (gold / silver / bronze)',
-  'pause.title': 'Paused',
-  'win.title': 'Board cleared',
-  'win.restored': 'Restored: {name}',
-  'win.time': 'Time',
-  'win.score': 'Score',
-  'win.hints': 'Hints used',
-  'win.best': 'Best',
-  'win.dailyDone': 'Daily challenge complete',
-  'stuck.title': 'No more matches',
-  'stuck.text': 'There are no free pairs left. Shuffle the remaining tiles or undo your last moves.',
-  'stuck.noShuffle': 'No shuffles left on this board.',
-  'stuck.tipTitle': 'A gentle tip',
-  'stuck.tip': 'This happens to everyone! Shuffle mixes the remaining tiles into a new layout that can always be finished. Next time, try to free the tops of tall stacks and the ends of long rows first.',
-  'stuck.cannot': 'These last tiles cannot be shuffled into a layout that can be finished. Undo a few moves instead.',
-  'tut.1.title': 'Match two free tiles',
-  'tut.1.text': 'Tap two tiles with exactly the same picture to remove them. Try the glowing pair.',
-  'tut.2.title': 'Which tiles are free?',
-  'tut.2.text': 'A tile is free when nothing lies on top of it and its left or right side is open. Free tiles are shown bright; blocked tiles are shaded.',
-  'tut.3.title': 'Take your time',
-  'tut.3.text': 'Hint, Undo and Shuffle are always below the board. There is no time limit: the clock only counts toward your score.',
-  'tut.step': '{n} of 3',
-  'tut.next': 'Next',
-  'tut.done': 'Start playing',
-  'settings.title': 'Settings',
-  'settings.music': 'Music',
-  'settings.sound': 'Sound effects',
-  'settings.highlight': 'Highlight free tiles',
-  'settings.contrast': 'Colorblind-friendly suits (Classic)',
-  'settings.tiles': 'Tiles',
-  'settings.tilesGarden': 'Garden',
-  'settings.tilesClassic': 'Classic',
-  'settings.timer': 'Show timer',
-  'settings.language': 'Language',
-  'settings.tutorial': 'Show tutorial again',
-  'settings.on': 'On',
-  'settings.off': 'Off',
-  'stats.title': 'Statistics',
-  'stats.journey': 'Journey boards cleared',
-  'stats.played': 'Boards played',
-  'stats.won': 'Boards cleared',
-  'stats.rate': 'Win rate',
-  'stats.bestTime': 'Best time',
-  'stats.avgTime': 'Average time',
-  'stats.bestScore': 'Best score',
-  'stats.tiles': 'Tiles matched',
-  'stats.streak': 'Daily streak',
-  'stats.stars': 'Stars earned',
-  'garden.title': 'The Jade Garden',
-  'garden.progress': '{n} of {total} restored',
-  'garden.text': 'Each cleared board brings one part of the garden back to life.',
-  'garden.next': 'Next: {name}',
-  'garden.complete': 'This season’s garden is complete.',
-  'season.spring': 'Spring',
-  'season.summer': 'Summer',
-  'season.autumn': 'Autumn',
-  'season.winter': 'Winter',
-  'daily.title': 'Daily Challenge',
-  'daily.done': 'Done today',
-  'layout.stones': 'Stepping Stones',
-  'layout.lantern': 'Paper Lantern',
-  'layout.pond': 'Koi Pond',
-  'layout.bridge': 'Moon Bridge',
-  'layout.blossom': 'Plum Blossom',
-  'layout.koi': 'Twin Koi',
-  'layout.pagoda': 'Pagoda',
-  'layout.bamboo': 'Bamboo Grove',
-  'layout.gate': 'Moon Gate',
-  'layout.fan': 'Silk Fan',
-  'layout.pavilion': 'Pavilion',
-  'layout.cascade': 'Cascade',
-  'layout.maple': 'Maple Leaf',
-  'layout.lotus': 'Lotus Cross',
-  'layout.cranes': 'Flying Cranes',
-  'layout.turtle': 'Jade Turtle',
-  'loading': 'Loading…',
-  'el.stoneLantern': 'Stone Lantern',
-  'el.path': 'Stepping Stones',
-  'el.pond': 'Koi Pond',
-  'el.koi': 'Koi',
-  'el.bridge': 'Moon Bridge',
-  'el.pagoda': 'Pagoda',
-  'el.blossomTree': 'Blossom Tree',
-  'el.bamboo': 'Bamboo Grove',
-  'el.moonGate': 'Moon Gate',
-  'el.lanterns': 'Paper Lanterns',
-  'el.pavilion': 'Pavilion',
-  'el.waterfall': 'Waterfall Rocks',
-  'el.maple': 'Maple Tree',
-  'el.lotus': 'Lotus Flowers',
-  'el.cranes': 'Cranes',
-  'el.pine': 'Old Pine',
+export type StrKey = keyof typeof en;
+export const LANGS = ['en', 'fr', 'de', 'it', 'es', 'pt', 'nl', 'pl', 'tr', 'ru'] as const;
+export type Lang = (typeof LANGS)[number];
+
+/** each language's own name, for the language picker */
+export const LANG_NAMES: Record<Lang, string> = {
+  en: 'English',
+  fr: 'Français',
+  de: 'Deutsch',
+  it: 'Italiano',
+  es: 'Español',
+  pt: 'Português',
+  nl: 'Nederlands',
+  pl: 'Polski',
+  tr: 'Türkçe',
+  ru: 'Русский',
 };
 
-export type StrKey = keyof typeof EN;
+export const STRINGS: Record<Lang, Partial<Record<StrKey, string>>> = { en, fr, de, it, es, pt, nl, pl, tr, ru };
 
-const FR: Record<StrKey, string> = {
-  'title.mahjong': 'Mahjong',
-  'title.jadeGarden': 'Jade Garden',
-  'title.tagline': 'Le solitaire classique dans un jardin paisible',
-  'menu.play': 'Jouer',
-  'menu.continue': 'Continuer',
-  'menu.daily': 'Défi du jour',
-  'menu.garden': 'Le Jardin de Jade',
-  'menu.stats': 'Statistiques',
-  'menu.settings': 'Réglages',
-  'menu.board': 'Plateau {n}',
-  'hud.matches': 'Paires',
-  'hud.time': 'Temps',
-  'hud.score': 'Score',
-  'hud.tiles': 'Tuiles',
-  'btn.hint': 'Indice',
-  'btn.undo': 'Annuler',
-  'btn.shuffle': 'Mélanger',
-  'btn.settings': 'Réglages',
-  'btn.menu': 'Menu',
-  'btn.next': 'Plateau suivant',
-  'btn.close': 'Fermer',
-  'btn.back': 'Retour',
-  'btn.resume': 'Reprendre',
-  'btn.restart': 'Recommencer',
-  'btn.newBoard': 'Nouveau plateau',
-  'btn.ok': 'Compris',
-  'btn.gotoGarden': 'Voir le jardin',
-  'btn.resetZoom': 'Ajuster',
-  'btn.watchAd': 'Regarder une courte pub',
-  'ad.none': 'Aucune pub disponible pour le moment, réessayez plus tard',
-  'ad.extraShuffle': 'Mélange en plus',
-  'ad.extraHint': 'Indice en plus',
-  'ad.offer': 'Regarder une courte vidéo pour en obtenir un autre ?',
-  'ad.plus': '+1 {what}',
-  'ad.watchPlus': 'Regarder une pub : +1 {what}',
-  'ad.extraUndo': 'Annulation en plus',
-  'ad.continue': 'Regarder une pub : Continuer',
-  'btn.continueFree': 'Continuer',
-  'menu.journey': 'Le voyage',
-  'journey.title': 'Le voyage',
-  'journey.next': 'Suivant',
-  'journey.locked': 'Verrouillé',
-  'journey.season': '{season} · plateaux {a} à {b}',
-  'journey.done': '{n} plateaux terminés sur {total}',
-  'btn.journey': 'Voyage',
-  'win.newBest': 'Nouveau record !',
-  'win.bestTime': 'Meilleur temps',
-  'daily.streak': '{n} jours d’affilée',
-  'daily.keep': 'Gardez votre série de {n} jours aujourd’hui',
-  'daily.new': 'Un nouveau plateau chaque jour',
-  'medal.gold': 'Médaille d’or',
-  'medal.silver': 'Médaille d’argent',
-  'medal.bronze': 'Médaille de bronze',
-  'medal.rule': 'Or en moins de {g} · Argent en moins de {s}',
-  'win.personalBest': 'Record personnel du jour',
-  'stats.bestDaily': 'Meilleur temps du défi',
-  'stats.longest': 'Plus longue série du défi',
-  'stats.medals': 'Médailles du défi (or / argent / bronze)',
-  'pause.title': 'Pause',
-  'win.title': 'Plateau terminé',
-  'win.restored': 'Restauré : {name}',
-  'win.time': 'Temps',
-  'win.score': 'Score',
-  'win.hints': 'Indices utilisés',
-  'win.best': 'Record',
-  'win.dailyDone': 'Défi du jour réussi',
-  'stuck.title': 'Plus aucune paire',
-  'stuck.text': 'Il ne reste aucune paire libre. Mélangez les tuiles restantes ou annulez vos derniers coups.',
-  'stuck.noShuffle': 'Plus de mélange sur ce plateau.',
-  'stuck.tipTitle': 'Petit conseil',
-  'stuck.tip': 'Cela arrive à tout le monde ! Mélanger redistribue les tuiles restantes dans une disposition qui peut toujours être terminée. La prochaine fois, libérez d’abord le haut des piles et les bouts des longues rangées.',
-  'stuck.cannot': 'Ces dernières tuiles ne peuvent pas être mélangées de façon jouable. Annulez plutôt quelques coups.',
-  'tut.1.title': 'Associez deux tuiles libres',
-  'tut.1.text': 'Touchez deux tuiles avec exactement la même image pour les retirer. Essayez la paire lumineuse.',
-  'tut.2.title': 'Quelles tuiles sont libres ?',
-  'tut.2.text': 'Une tuile est libre si rien n’est posé dessus et si son côté gauche ou droit est dégagé. Les tuiles libres sont claires, les autres sont ombrées.',
-  'tut.3.title': 'Prenez votre temps',
-  'tut.3.text': 'Indice, Annuler et Mélanger sont toujours sous le plateau. Pas de limite de temps : le chrono compte seulement pour le score.',
-  'tut.step': '{n} sur 3',
-  'tut.next': 'Suivant',
-  'tut.done': 'Commencer',
-  'settings.title': 'Réglages',
-  'settings.music': 'Musique',
-  'settings.sound': 'Effets sonores',
-  'settings.highlight': 'Mettre en valeur les tuiles libres',
-  'settings.contrast': 'Couleurs pour daltoniens (Classique)',
-  'settings.tiles': 'Tuiles',
-  'settings.tilesGarden': 'Jardin',
-  'settings.tilesClassic': 'Classique',
-  'settings.timer': 'Afficher le chrono',
-  'settings.language': 'Langue',
-  'settings.tutorial': 'Revoir le tutoriel',
-  'settings.on': 'Oui',
-  'settings.off': 'Non',
-  'stats.title': 'Statistiques',
-  'stats.journey': 'Plateaux du voyage terminés',
-  'stats.played': 'Plateaux joués',
-  'stats.won': 'Plateaux terminés',
-  'stats.rate': 'Taux de réussite',
-  'stats.bestTime': 'Meilleur temps',
-  'stats.avgTime': 'Temps moyen',
-  'stats.bestScore': 'Meilleur score',
-  'stats.tiles': 'Tuiles associées',
-  'stats.streak': 'Série du défi',
-  'stats.stars': 'Étoiles gagnées',
-  'garden.title': 'Le Jardin de Jade',
-  'garden.progress': '{n} sur {total} restaurés',
-  'garden.text': 'Chaque plateau terminé redonne vie à une partie du jardin.',
-  'garden.next': 'Prochain : {name}',
-  'garden.complete': 'Le jardin de cette saison est complet.',
-  'season.spring': 'Printemps',
-  'season.summer': 'Été',
-  'season.autumn': 'Automne',
-  'season.winter': 'Hiver',
-  'daily.title': 'Défi du jour',
-  'daily.done': 'Fait aujourd’hui',
-  'layout.stones': 'Pas japonais',
-  'layout.lantern': 'Lanterne de papier',
-  'layout.pond': 'Bassin aux carpes',
-  'layout.bridge': 'Pont de lune',
-  'layout.blossom': 'Fleur de prunier',
-  'layout.koi': 'Carpes jumelles',
-  'layout.pagoda': 'Pagode',
-  'layout.bamboo': 'Bambouseraie',
-  'layout.gate': 'Porte de lune',
-  'layout.fan': 'Éventail de soie',
-  'layout.pavilion': 'Pavillon',
-  'layout.cascade': 'Cascade',
-  'layout.maple': 'Feuille d’érable',
-  'layout.lotus': 'Croix de lotus',
-  'layout.cranes': 'Vol de grues',
-  'layout.turtle': 'Tortue de jade',
-  'loading': 'Chargement…',
-  'el.stoneLantern': 'Lanterne de pierre',
-  'el.path': 'Pas japonais',
-  'el.pond': 'Bassin aux carpes',
-  'el.koi': 'Carpes koï',
-  'el.bridge': 'Pont de lune',
-  'el.pagoda': 'Pagode',
-  'el.blossomTree': 'Arbre en fleurs',
-  'el.bamboo': 'Bosquet de bambous',
-  'el.moonGate': 'Porte de lune',
-  'el.lanterns': 'Lanternes de papier',
-  'el.pavilion': 'Pavillon',
-  'el.waterfall': 'Rochers et cascade',
-  'el.maple': 'Érable',
-  'el.lotus': 'Fleurs de lotus',
-  'el.cranes': 'Grues',
-  'el.pine': 'Vieux pin',
-};
+/** names that the GamePix build replaces (neutral garden pieces and board shapes, see src/art/garden.ts) */
+const GPX_KEYS = new Set<string>(['el.stoneLantern', 'el.pagoda', 'el.lotus', 'layout.pagoda', 'layout.lotus']);
+
+export const isLang = (l: unknown): l is Lang => typeof l === 'string' && (LANGS as readonly string[]).includes(l);
+
+/** "pt-BR" -> "pt"; anything we do not have -> null */
+export function langOf(locale: string | null | undefined): Lang | null {
+  if (!locale) return null;
+  const base = locale.toLowerCase().replace('_', '-').split('-')[0];
+  return isLang(base) ? base : null;
+}
+
+/** the language to start in: saved choice, then the portal's locale, then the browser's languages, then English */
+export function pickLang(saved: string | null | undefined, portalLocale: string | null | undefined, browser: readonly string[] = []): Lang {
+  if (isLang(saved)) return saved;
+  const p = langOf(portalLocale);
+  if (p) return p;
+  for (const b of browser) {
+    const l = langOf(b);
+    if (l) return l;
+  }
+  return 'en';
+}
+
+export function browserLangs(): string[] {
+  if (typeof navigator === 'undefined') return [];
+  return [...(navigator.languages ?? []), navigator.language].filter(Boolean);
+}
 
 let lang: Lang = 'en';
 export function setLang(l: Lang) {
   lang = l;
-  document.documentElement.lang = l;
+  if (typeof document !== 'undefined') document.documentElement.lang = l;
 }
 export function getLang(): Lang {
   return lang;
 }
-export function detectLang(): Lang {
-  const n = (navigator.languages?.[0] || navigator.language || 'en').toLowerCase();
-  return n.startsWith('fr') ? 'fr' : 'en';
-}
+
 export function t(k: StrKey, vars?: Record<string, string | number>): string {
-  let s = (lang === 'fr' ? FR : EN)[k] ?? EN[k] ?? k;
-  if (vars) for (const [a, b] of Object.entries(vars)) s = s.replace(`{${a}}`, String(b));
+  const key = (__PLATFORM__ === 'gamepix' && GPX_KEYS.has(k) ? `gpx.${k}` : k) as StrKey;
+  let s = STRINGS[lang][key] ?? (en as Record<string, string>)[key] ?? k;
+  if (vars) for (const [a, b] of Object.entries(vars)) s = s.split(`{${a}}`).join(String(b));
   return s;
 }
-export function windLetters(): readonly string[] {
-  return lang === 'fr' ? ['E', 'S', 'O', 'N'] : ['E', 'S', 'W', 'N'];
-}
-export const STRINGS = { EN, FR };
-// GamePix build: names of the neutral garden pieces and board shapes that replace the ones with a possible
-// religious reading (see src/art/garden.ts, src/layouts/catalog.ts)
-if (__PLATFORM__ === 'gamepix') {
-  Object.assign(EN, { 'el.stoneLantern': 'Garden Bench', 'el.pagoda': 'Weeping Willow', 'el.lotus': 'Water Lilies', 'layout.pagoda': 'Terraces', 'layout.lotus': 'Lily Pad' });
-  Object.assign(FR, { 'el.stoneLantern': 'Banc de jardin', 'el.pagoda': 'Saule pleureur', 'el.lotus': 'Nénuphars', 'layout.pagoda': 'Terrasses', 'layout.lotus': 'Feuille de nénuphar' });
-}
 
+/** letters on the Classic wind tiles (East, South, West, North) */
+export function windLetters(): readonly string[] {
+  const w = t('tile.winds');
+  return w.length === 4 ? w.split('') : ['E', 'S', 'W', 'N'];
+}

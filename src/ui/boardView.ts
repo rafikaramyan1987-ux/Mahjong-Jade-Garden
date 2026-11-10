@@ -14,16 +14,26 @@ export interface Rect {
   h: number;
 }
 
-interface Fading {
-  i: number;
+/** a matched tile: it lifts, flies to meet its partner, and both burst into sparkles and petals */
+interface Flyer {
   face: number;
+  /** start (top-left of the face) and the meeting point (center), board space */
   x: number;
   y: number;
+  mx: number;
+  my: number;
+  /** -1 / +1: which side it comes from (for the little tilt) */
+  side: number;
   t0: number;
 }
 
-const FADE_MS = 520;
-const SPARK_MS = 700;
+/** lift, then fly together; the burst starts at FLY_MS */
+const LIFT_MS = 110;
+const FLY_MS = 330;
+const VANISH_MS = 120;
+const FADE_MS = FLY_MS + VANISH_MS;
+const SPARK_MS = 760;
+const PETAL_MS = 1100;
 
 interface Spark {
   x: number;
@@ -33,7 +43,13 @@ interface Spark {
   r: number;
   t0: number;
   color: string;
+  /** 'star' sparkles or 'petal' (pink / white blossom petals that tumble and drift down) */
+  kind: 'star' | 'petal';
+  rot: number;
+  spin: number;
 }
+const PETAL_COLORS = ['#f8b8c9', '#fde3ea', '#f39bb3', '#ffffff'];
+const SPARK_COLORS = ['#fff7c2', '#ffd54f', '#ffffff', '#b9f6ca'];
 const HINT_MS = 3200;
 const SHAKE_MS = 320;
 
@@ -59,7 +75,11 @@ export class BoardView {
   private hintT0 = 0;
   /** tiles pulsing for the tutorial (no timeout) */
   spotlight: number[] = [];
-  private fading: Fading[] = [];
+  private fading: Flyer[] = [];
+  /** a blocked tile marked by the tutorial (soft amber ring and a lock), or -1 */
+  blockedMark = -1;
+  /** large tiles: the board starts zoomed in to about this tile width (px), 0 = fit the screen */
+  preferTile = 0;
   private sparks: Spark[] = [];
   private shake: { i: number; t0: number } | null = null;
   private raf = 0;
@@ -89,10 +109,29 @@ export class BoardView {
     this.selected = -1;
     this.hint = null;
     this.spotlight = [];
+    this.blockedMark = -1;
     this.fading = [];
+    this.sparks = [];
     this.resetZoom();
     this.fit();
+    this.applyPreferredZoom();
     this.invalidate();
+  }
+
+  /** large tiles: zoom in around the board center until tiles are about `preferTile` wide (at most 1.6x) */
+  applyPreferredZoom() {
+    if (!this.game || !this.preferTile || this.m.w >= this.preferTile) return;
+    const z = Math.min(1.6, this.preferTile / this.m.w);
+    this.setZoom(z, this.area.x + this.area.w / 2, this.area.y + this.area.h / 2);
+  }
+
+  /** a point in board space (before zoom) on the screen */
+  boardToScreen(x: number, y: number): [number, number] {
+    return this.toScreen(x, y);
+  }
+
+  get animating() {
+    return this.fading.length > 0 || this.sparks.length > 0;
   }
 
   setFaceOptions(o: FaceOptions) {
@@ -108,7 +147,10 @@ export class BoardView {
     this.canvas.height = Math.round(H * dpr);
     this.canvas.style.width = W + 'px';
     this.canvas.style.height = H + 'px';
+    const zoomed = this.zoom > 1.01;
     this.fit();
+    if (!zoomed) this.applyPreferredZoom();
+    else this.clampPan();
     this.invalidate();
   }
 
@@ -192,31 +234,39 @@ export class BoardView {
     this.invalidate();
   }
 
-  /** matched tiles lift and fade */
-  removeAnim(a: number, b: number) {
+  /**
+   * Matched tiles lift, fly together and burst into sparkles and blossom petals at their meeting point.
+   * Returns the meeting point on the screen (for the score / combo label).
+   */
+  removeAnim(a: number, b: number, strength = 1): [number, number] {
     const g = this.game!;
     const now = performance.now();
-    for (const i of [a, b]) {
-      const [x, y] = this.tileXY(i);
-      this.fading.push({ i, face: g.faces[i], x, y, t0: now });
-      // a burst of little stars from the tile's center
-      if (!this.reducedMotion)
-        for (let k = 0; k < 12; k++) {
-          const ang = (k / 12) * Math.PI * 2 + Math.random() * 0.4;
-          const sp = this.m.w * (0.9 + Math.random() * 0.9);
-          this.sparks.push({
-            x: x + this.m.w / 2,
-            y: y + this.m.h / 2,
-            vx: Math.cos(ang) * sp,
-            vy: Math.sin(ang) * sp - this.m.w * 0.3,
-            r: this.m.w * (0.05 + Math.random() * 0.05),
-            t0: now,
-            color: ['#fff7c2', '#ffd54f', '#ffffff', '#b9f6ca'][k % 4],
-          });
-        }
+    const [ax, ay] = this.tileXY(a);
+    const [bx, by] = this.tileXY(b);
+    const mx = (ax + bx) / 2 + this.m.w / 2;
+    const my = (ay + by) / 2 + this.m.h / 2 - this.m.h * 0.12;
+    this.fading.push({ face: g.faces[a], x: ax, y: ay, mx, my, side: ax <= bx ? -1 : 1, t0: now });
+    this.fading.push({ face: g.faces[b], x: bx, y: by, mx, my, side: ax <= bx ? 1 : -1, t0: now });
+    if (!this.reducedMotion) {
+      const t0 = now + FLY_MS;
+      const w = this.m.w;
+      // sparkles: more on combos
+      const n = Math.round(14 + 6 * Math.min(4, strength - 1));
+      for (let k = 0; k < n; k++) {
+        const ang = (k / n) * Math.PI * 2 + Math.random() * 0.4;
+        const sp = w * (1.1 + Math.random() * 1.1);
+        this.sparks.push({ x: mx, y: my, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - w * 0.35, r: w * (0.05 + Math.random() * 0.05), t0, color: SPARK_COLORS[k % 4], kind: 'star', rot: 0, spin: 3 });
+      }
+      // blossom petals drift up and tumble down
+      for (let k = 0; k < 10; k++) {
+        const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.6;
+        const sp = w * (0.7 + Math.random() * 0.9);
+        this.sparks.push({ x: mx, y: my, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: w * (0.07 + Math.random() * 0.04), t0, color: PETAL_COLORS[k % 4], kind: 'petal', rot: Math.random() * 6, spin: (Math.random() - 0.5) * 9 });
+      }
     }
     if (this.hint && (this.hint.includes(a) || this.hint.includes(b))) this.hint = null;
     this.invalidate();
+    return this.toScreen(mx, my);
   }
 
   shakeTile(i: number) {
@@ -233,10 +283,10 @@ export class BoardView {
     this.raf = 0;
     const now = performance.now();
     this.fading = this.fading.filter((f) => now - f.t0 < FADE_MS);
-    this.sparks = this.sparks.filter((p) => now - p.t0 < SPARK_MS);
+    this.sparks = this.sparks.filter((p) => now - p.t0 < (p.kind === 'petal' ? PETAL_MS : SPARK_MS));
     if (this.hint && now - this.hintT0 > HINT_MS) this.hint = null;
     if (this.shake && now - this.shake.t0 > SHAKE_MS) this.shake = null;
-    const animating = this.fading.length > 0 || this.sparks.length > 0 || !!this.hint || !!this.shake || this.spotlight.length > 0;
+    const animating = this.fading.length > 0 || this.sparks.length > 0 || !!this.hint || !!this.shake || this.spotlight.length > 0 || this.blockedMark >= 0;
     if (this.dirty || animating) this.draw(now);
     this.dirty = false;
     if (animating) this.raf = requestAnimationFrame(() => this.frame());
@@ -260,8 +310,19 @@ export class BoardView {
     const pulse = 0.5 + 0.5 * Math.sin(now / 260);
     for (const i of g.g.order) {
       if (!g.present[i]) continue;
-      const [x0, y] = this.tileXY(i);
+      const [x0, y0] = this.tileXY(i);
       let x = x0;
+      let y = y0;
+      const sel = i === this.selected;
+      if (sel) {
+        // the selected tile lifts a little, with a soft shadow under it
+        y -= this.m.h * 0.05;
+        ctx.save();
+        ctx.fillStyle = 'rgba(10, 40, 28, 0.28)';
+        roundRect(ctx, x0 + w * 0.04, y0 + h * 0.06, w, h, r);
+        ctx.fill();
+        ctx.restore();
+      }
       if (this.shake && this.shake.i === i) {
         const t = (now - this.shake.t0) / SHAKE_MS;
         x += Math.sin(t * Math.PI * 6) * (1 - t) * w * 0.06;
@@ -273,7 +334,7 @@ export class BoardView {
         roundRect(ctx, x, y, w, h, r);
         ctx.fill();
       }
-      if (i === this.selected) {
+      if (sel) {
         ctx.fillStyle = 'rgba(250, 205, 90, 0.32)';
         roundRect(ctx, x, y, w, h, r);
         ctx.fill();
@@ -281,6 +342,34 @@ export class BoardView {
         ctx.lineWidth = Math.max(2.5, w * 0.06);
         roundRect(ctx, x + 1, y + 1, w - 2, h - 2, r);
         ctx.stroke();
+      }
+      if (i === this.blockedMark) {
+        // tutorial: a blocked tile, soft amber ring and a small lock
+        ctx.save();
+        ctx.strokeStyle = `rgba(240, 150, 60, ${0.7 + 0.3 * pulse})`;
+        ctx.lineWidth = Math.max(3, w * 0.07);
+        ctx.setLineDash([w * 0.12, w * 0.08]);
+        roundRect(ctx, x + 1, y + 1, w - 2, h - 2, r);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const lr = w * 0.17;
+        const lx = x + w - lr * 0.6;
+        const ly = y + lr * 0.6;
+        ctx.fillStyle = '#f39a3c';
+        ctx.strokeStyle = '#5a3412';
+        ctx.lineWidth = Math.max(1.5, w * 0.025);
+        ctx.beginPath();
+        ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = Math.max(1.5, w * 0.03);
+        ctx.beginPath();
+        ctx.arc(lx, ly - lr * 0.15, lr * 0.32, Math.PI, 0);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(lx - lr * 0.42, ly - lr * 0.12, lr * 0.84, lr * 0.6);
+        ctx.restore();
       }
       const glow = (this.hint && this.hint.includes(i)) || this.spotlight.includes(i);
       if (glow) {
@@ -295,48 +384,75 @@ export class BoardView {
       }
     }
     for (const f of this.fading) {
-      const t = Math.min(1, (now - f.t0) / FADE_MS);
-      const e = 1 - (1 - t) * (1 - t);
+      const el = now - f.t0;
+      // lift (scale up, rise), fly to the meeting point (ease in), then vanish into the burst
+      const lift = Math.min(1, el / LIFT_MS);
+      const fly = Math.max(0, Math.min(1, (el - LIFT_MS) / (FLY_MS - LIFT_MS)));
+      const fe = fly * fly * (3 - 2 * fly);
+      const vanish = Math.max(0, Math.min(1, (el - FLY_MS) / VANISH_MS));
+      const sx = f.x + w / 2;
+      const sy = f.y + h / 2 - lift * h * 0.12;
+      const cx2 = sx + (f.mx - sx) * fe;
+      const cy2 = sy + (f.my - sy) * fe - Math.sin(fe * Math.PI) * h * 0.18;
+      const s = (1 + lift * 0.12) * (1 - vanish * 0.6);
       ctx.save();
-      ctx.globalAlpha = 1 - e;
-      const s = 1 + e * 0.12;
-      ctx.translate(f.x + w / 2, f.y + h / 2 - e * h * 0.25);
+      ctx.globalAlpha = 1 - vanish;
+      ctx.translate(cx2, cy2);
+      ctx.rotate(f.side * 0.12 * Math.sin(fe * Math.PI));
       ctx.scale(s, s);
+      ctx.shadowColor = 'rgba(255, 230, 140, 0.9)';
+      ctx.shadowBlur = w * 0.25 * lift;
       sp.draw(ctx, f.face, -w / 2, -h / 2);
       ctx.restore();
-      // a warm glow ring
-      ctx.save();
-      ctx.globalAlpha = (1 - e) * 0.85;
-      const cx2 = f.x + w / 2;
-      const cy2 = f.y + h / 2 - e * h * 0.25;
-      const gr = ctx.createRadialGradient(cx2, cy2, w * 0.2, cx2, cy2, w * (0.7 + e * 0.9));
-      gr.addColorStop(0, 'rgba(255, 246, 200, 0.95)');
-      gr.addColorStop(0.5, 'rgba(255, 214, 90, 0.5)');
-      gr.addColorStop(1, 'rgba(255, 214, 90, 0)');
-      ctx.fillStyle = gr;
-      ctx.fillRect(cx2 - w * 2, cy2 - w * 2, w * 4, w * 4);
-      ctx.restore();
+      if (vanish > 0) {
+        // a warm flash where the two tiles meet
+        ctx.save();
+        ctx.globalAlpha = (1 - vanish) * 0.9;
+        const gr = ctx.createRadialGradient(f.mx, f.my, w * 0.1, f.mx, f.my, w * (0.6 + vanish * 1.1));
+        gr.addColorStop(0, 'rgba(255, 250, 220, 1)');
+        gr.addColorStop(0.45, 'rgba(255, 214, 90, 0.55)');
+        gr.addColorStop(1, 'rgba(255, 214, 90, 0)');
+        ctx.fillStyle = gr;
+        ctx.fillRect(f.mx - w * 2, f.my - w * 2, w * 4, w * 4);
+        ctx.restore();
+      }
     }
     for (const p of this.sparks) {
-      const t = (now - p.t0) / SPARK_MS;
-      const px = p.x + p.vx * t;
-      const py = p.y + p.vy * t + this.m.w * 0.8 * t * t;
-      const rr = p.r * (1 - t * 0.6);
+      if (now < p.t0) continue;
+      const petal = p.kind === 'petal';
+      const t = (now - p.t0) / (petal ? PETAL_MS : SPARK_MS);
+      const drag = petal ? 1 - Math.exp(-3 * t) : t;
+      const px = p.x + p.vx * (petal ? drag * 0.45 : t) + (petal ? Math.sin(t * 9 + p.rot) * w * 0.12 : 0);
+      const py = p.y + p.vy * (petal ? drag * 0.45 : t) + w * (petal ? 0.9 : 0.8) * t * t;
       ctx.save();
-      ctx.globalAlpha = 1 - t;
+      ctx.globalAlpha = petal ? Math.min(1, (1 - t) * 1.6) : 1 - t;
       ctx.translate(px, py);
-      ctx.rotate(t * 3);
+      ctx.rotate(p.rot + t * p.spin);
       ctx.fillStyle = p.color;
-      ctx.shadowColor = 'rgba(255, 220, 120, 0.9)';
-      ctx.shadowBlur = rr * 3;
-      ctx.beginPath();
-      for (let k = 0; k < 8; k++) {
-        const a = (k / 8) * Math.PI * 2;
-        const rad = k % 2 ? rr * 0.38 : rr * 1.6;
-        ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      if (petal) {
+        // a blossom petal: an oval with a notch, slowly turning (flattened as it spins)
+        ctx.scale(1, 0.55 + 0.45 * Math.abs(Math.cos(t * 7 + p.rot)));
+        ctx.beginPath();
+        ctx.moveTo(0, -p.r * 1.2);
+        ctx.bezierCurveTo(p.r * 1.1, -p.r * 0.9, p.r * 1.0, p.r * 0.8, 0, p.r * 1.2);
+        ctx.bezierCurveTo(-p.r * 1.0, p.r * 0.8, -p.r * 1.1, -p.r * 0.9, 0, -p.r * 1.2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(200, 90, 120, 0.45)';
+        ctx.lineWidth = Math.max(1, p.r * 0.18);
+        ctx.stroke();
+      } else {
+        const rr = p.r * (1 - t * 0.6);
+        ctx.shadowColor = 'rgba(255, 220, 120, 0.9)';
+        ctx.shadowBlur = rr * 3;
+        ctx.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const rad = k % 2 ? rr * 0.38 : rr * 1.6;
+          ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+        }
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.closePath();
-      ctx.fill();
       ctx.restore();
     }
   }

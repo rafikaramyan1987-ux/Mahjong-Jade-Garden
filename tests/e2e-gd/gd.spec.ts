@@ -33,7 +33,7 @@ async function boot(page: Page, sdk: 'fake' | 'blocked' = 'fake') {
   await page.route('https://html5.api.gamedistribution.com/main.min.js', (r) =>
     sdk === 'blocked' ? r.abort() : r.fulfill({ contentType: 'application/javascript', body: FAKE_SDK }),
   );
-  await page.goto('/?fresh');
+  await page.goto('/?fresh&menu');
   await page.waitForSelector('body[data-ready="1"]');
   return errors;
 }
@@ -146,7 +146,7 @@ test('the game stays fully playable when the SDK cannot load', async ({ page }) 
   for (let i = 0; i < 4; i++) await page.click('[data-testid=hint]');
   await page.click('[data-testid=reward]');
   await expect(page.locator('[data-testid=reward]')).toHaveText('No ad available right now, try later');
-  await page.locator('.panel .btn', { hasText: 'Close' }).click();
+  await page.click('[data-testid=no-thanks]');
   await page.evaluate(() => window.__mjg.solve());
   await expect(page.locator('[data-testid=win]')).toBeVisible();
   await page.click('[data-testid=next]');
@@ -154,7 +154,7 @@ test('the game stays fully playable when the SDK cannot load', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-test('rewarded extras: "Watch an ad: +1" for Hint, Undo and a rewarded Continue when stuck', async ({ page }) => {
+test('rewarded extras: "Watch an ad: +1" for Hint, Undo; stuck: a free shuffle first, then a rewarded one', async ({ page }) => {
   await boot(page);
   await page.click('[data-testid=play]');
   await page.evaluate(() => window.__mjg.skipTutorial());
@@ -162,7 +162,7 @@ test('rewarded extras: "Watch an ad: +1" for Hint, Undo and a rewarded Continue 
   for (let i = 0; i < 3; i++) await page.click('[data-testid=hint]');
   await expect(page.locator('[data-testid=hint] .badge')).toHaveText('+1');
   await page.click('[data-testid=hint]');
-  await expect(page.locator('[data-testid=reward]')).toHaveText(/Watch an ad: \+1 Hint/);
+  await expect(page.locator('[data-testid=reward]')).toHaveText(/Watch an ad: \+1 hint/);
   await page.click('[data-testid=reward]');
   await expect.poll(() => ads(page).then((a) => a.at(-1))).toBe('rewarded');
   await expect(page.locator('[data-testid=reward]')).toHaveCount(0);
@@ -177,15 +177,20 @@ test('rewarded extras: "Watch an ad: +1" for Hint, Undo and a rewarded Continue 
   for (let i = 0; i < 5; i++) await page.click('[data-testid=undo]');
   expect((await state(page)).undosLeft).toBe(0);
   await page.click('[data-testid=undo]');
-  await expect(page.locator('[data-testid=reward]')).toHaveText(/Watch an ad: \+1 Undo/);
+  await expect(page.locator('[data-testid=reward]')).toHaveText(/Watch an ad: \+1 undo/);
   const before = (await state(page)).remaining!;
   await page.click('[data-testid=reward]');
   await expect.poll(() => state(page).then((s) => s.remaining)).toBe(before + 2);
-  // no shuffles left and stuck -> rewarded Continue
+  // stuck: the first time on a board Shuffle is free (no ad)
+  await page.evaluate(() => window.__mjg.stuck());
+  const nAds = (await ads(page)).length;
+  await page.click('[data-testid=stuck-shuffle]');
+  expect((await ads(page)).length).toBe(nAds);
+  // no shuffles left and stuck again -> a rewarded shuffle
   await page.click('[data-testid=shuffle]');
   await page.click('[data-testid=shuffle]');
   await page.evaluate(() => window.__mjg.stuck());
-  await expect(page.locator('[data-testid=reward-continue]')).toHaveText(/Watch an ad: Continue/);
+  await expect(page.locator('[data-testid=reward-continue]')).toHaveText(/Watch an ad: \+1 shuffle/);
   await page.click('[data-testid=reward-continue]');
   await expect(page.locator('[data-testid=stuck]')).toHaveCount(0);
   expect((await state(page)).matches).toBeGreaterThan(0);

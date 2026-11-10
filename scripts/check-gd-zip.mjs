@@ -1,4 +1,4 @@
-// Checks a GameDistribution upload zip: node scripts/check-gd-zip.mjs [zip]   (default: submission-gd/mahjong-jade-garden-gd-v1.zip)
+// Checks a GameDistribution upload zip: node scripts/check-gd-zip.mjs [zip]   (default: submission-gd/mahjong-jade-garden-gd-v2.zip)
 // - exactly one entry, index.html, at the ROOT of the zip (no folder)
 // - the GD game id of Mahjong Jade Garden, exactly as configured (and no placeholder)
 // - the GD SDK loaded from https://html5.api.gamedistribution.com/main.min.js, referenced once
@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 export const GD_GAME_ID = '2708776451364ee68eca7c869f5371e0';
 const SDK_URL = 'https://html5.api.gamedistribution.com/main.min.js';
-const zip = process.argv[2] || 'submission-gd/mahjong-jade-garden-gd-v1.zip';
+const zip = process.argv[2] || 'submission-gd/mahjong-jade-garden-gd-v2.zip';
 const errors = [];
 const count = (s, needle) => s.split(needle).length - 1;
 

@@ -87,7 +87,12 @@ export function tileWidthIn(b: { minX: number; minY: number; maxX: number; maxY:
 
 /** board area (px) of a 390 x 844 phone in portrait (between the top bar and the buttons) and of 1280 x 720 */
 export const PHONE_PORTRAIT_AREA = { w: 374, h: 676 };
-export const DESKTOP_LANDSCAPE_AREA = { w: 1166, h: 636 };
+export const DESKTOP_LANDSCAPE_AREA = { w: 1146, h: 636 };
+/** board area (px) of a phone held sideways (844 x 390): compact bar on top, helper buttons on the right */
+export const PHONE_LANDSCAPE_AREA = { w: 724, h: 318 };
+/** smallest tile on phones held sideways, except on the hardest boards (where it may go down to SHORT_FLOOR_TILE) */
+export const MIN_SHORT_TILE = 56;
+export const SHORT_FLOOR_TILE = 44;
 /** smallest tile face width on every board: 56 px on a 390 x 844 phone, 64 px on 1280 x 720 */
 export const MIN_PORTRAIT_TILE = 56;
 export const MIN_LANDSCAPE_TILE = 64;
@@ -130,6 +135,10 @@ export interface FitOptions {
   layers: number;
   stack: Stack;
   portrait: boolean;
+  /** fit for a phone held sideways (few rows, more layers) instead of a desktop screen */
+  short?: boolean;
+  /** override the minimum tile width */
+  minTile?: number;
 }
 
 /**
@@ -141,12 +150,12 @@ export function fitShape(mask: Mask, o: FitOptions): Slot[] {
   let best: { slots: Slot[]; score: number } | null = null;
   const colsRange = o.portrait ? [3, MAX_PORTRAIT_COLS] : [4, 16];
   const rowsRange = o.portrait ? [4, 9] : [3, 8];
-  const area = o.portrait ? PHONE_PORTRAIT_AREA : DESKTOP_LANDSCAPE_AREA;
-  const minTile = o.portrait ? MIN_PORTRAIT_TILE : MIN_LANDSCAPE_TILE;
+  const area = o.portrait ? PHONE_PORTRAIT_AREA : o.short ? PHONE_LANDSCAPE_AREA : DESKTOP_LANDSCAPE_AREA;
+  const minTile = o.minTile ?? (o.portrait ? MIN_PORTRAIT_TILE : o.short ? MIN_SHORT_TILE : MIN_LANDSCAPE_TILE);
   for (let cols = colsRange[0]; cols <= colsRange[1]; cols++)
     for (let rows = rowsRange[0]; rows <= rowsRange[1]; rows++)
       for (const every of [1, 2, 3])
-        for (let layers = Math.max(1, o.layers - 1); layers <= o.layers + 3; layers++) {
+        for (let layers = Math.max(1, o.layers - 1); layers <= o.layers + (o.short ? 6 : 3); layers++) {
           const slots = buildStack(mask, cols, rows, layers, o.stack, every);
           const n = slots.length;
           if (n < 16 || n > 144) continue;

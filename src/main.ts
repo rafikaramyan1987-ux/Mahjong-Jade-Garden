@@ -3,15 +3,27 @@ import '@fontsource/lora/latin-700.css';
 import '@fontsource/source-sans-3/latin-400.css';
 import '@fontsource/source-sans-3/latin-600.css';
 import '@fontsource/source-sans-3/latin-700.css';
+import './ui/fonts-ext.css';
 import './ui/style.css';
 import { loadTileFont } from './art/tileArt';
 import { gpxLoading } from './app/platform/gamepixLoading';
 
+/** the loading screen's bar (index.html): it crawls while the file downloads, then follows the real boot steps */
+function bootProgress(p: number) {
+  const bar = document.querySelector('#boot i') as HTMLElement | null;
+  if (!bar) return;
+  bar.style.animation = 'none';
+  bar.style.width = Math.max(parseFloat(bar.style.width) || 0, p) + '%';
+}
+
 async function boot() {
+  bootProgress(66);
   const q = new URLSearchParams(location.search);
   // GamePix build: boot progress for the Player and the loading screen (index.html)
   if (__PLATFORM__ === 'gamepix') gpxLoading(10);
-  await Promise.all([loadTileFont(), document.fonts.load('600 20px Lora'), document.fonts.load('700 20px "Source Sans 3"'), document.fonts.load('400 20px "Source Sans 3"'), document.fonts.load('700 20px Lora')]);
+  // the fonts are inlined; load every face (Latin, Polish / Turkish, Cyrillic) before the first frame: no text jumps
+  const sample = 'Aąğя';
+  await Promise.all([loadTileFont(), ...['600 20px Lora', '700 20px Lora', '400 20px "Source Sans 3"', '600 20px "Source Sans 3"', '700 20px "Source Sans 3"'].map((f) => document.fonts.load(f, sample))]);
   const shot = q.get('shot');
   if (shot === 'tiles' || shot === 'tiles-classic' || shot === 'tiles-contrast') {
     const { renderTileSheet } = await import('./art/sheet');
@@ -22,6 +34,17 @@ async function boot() {
   if (shot === 'cover') {
     const { renderCover } = await import('./art/cover');
     renderCover(document.getElementById('bg') as HTMLCanvasElement, innerWidth, innerHeight, q.has('notag') ? null : undefined, { clearTopLeft: q.has('cg') });
+    document.body.dataset.ready = '1';
+    return;
+  }
+  if (shot === 'levels') {
+    // loudness of every effect and both music tracks, as heard in the game (scripts/audio-levels.mjs)
+    const { SFX_LIST, renderSfx, renderMusic, loudness } = await import('./app/audio');
+    const out: Record<string, number> = {};
+    for (const s of SFX_LIST) out[s] = loudness(await renderSfx(s, s === 'combo' ? 3 : 0));
+    // music: the average over 20 s (it plays all the time, under the effects)
+    for (const k of [0, 1]) out[`music${k + 1}`] = loudness(await renderMusic(k, 20), 44100, 20);
+    (window as unknown as { __levels: unknown }).__levels = out;
     document.body.dataset.ready = '1';
     return;
   }
@@ -36,8 +59,12 @@ async function boot() {
     return;
   }
   if (__PLATFORM__ === 'gamepix') gpxLoading(50);
+  bootProgress(82);
   const { startApp } = await import('./app/app');
   if (__PLATFORM__ === 'gamepix') gpxLoading(80);
+  bootProgress(94);
   await startApp();
+  bootProgress(100);
+  setTimeout(() => document.getElementById('boot')?.remove(), 600);
 }
 void boot();
