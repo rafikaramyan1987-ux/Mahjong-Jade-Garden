@@ -180,6 +180,19 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Playgama build
         run: npm run build:playgama
+      - name: Playgama build uses the GamePix-safe art (no religious-looking motifs; same swap as the GamePix build)
+        run: |
+          # the neutral pictures the safe set swaps in (src/art/gardenTiles.ts) are compiled into the Playgama and GamePix builds only
+          npm run build:gamepix
+          for m in '"tulip"' '"bonsai"' '"watering can"' '"snail"'; do
+            grep -qF "$m" dist-playgama/index.html || { echo "dist-playgama/index.html: safe tile $m missing"; exit 1; }
+            grep -qF "$m" dist-gamepix/index.html || { echo "dist-gamepix/index.html: safe tile $m missing"; exit 1; }
+          done
+          npm run build
+          for m in '"tulip"' '"bonsai"' '"watering can"' '"snail"'; do
+            if grep -qF "$m" dist/index.html; then echo "dist/index.html (standard art) unexpectedly has $m: the marker check is meaningless"; exit 1; fi
+          done
+          echo "OK: the Playgama build uses the safe tile set"
       - name: Playgama zip checks (index.html at the root, Bridge script referenced first in <head>, pinned Bridge build, no crazygames / gamedistribution / gamepix, Playgama's precheck)
         run: node scripts/playgama/zip.mjs ci-playgama/mahjong-jade-garden-playgama.zip && node scripts/playgama/check.mjs ci-playgama/mahjong-jade-garden-playgama.zip
       - name: Committed zip (submission-playgama/mahjong-jade-garden-playgama-v1.zip) passes the same checks

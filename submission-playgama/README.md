@@ -24,6 +24,10 @@ mahjong, mahjong solitaire, solitaire, tile matching, puzzle, relaxing, casual, 
 | `cover-800x800.png`, `cover-1080x1920.png`, `cover-1920x1080.png` | the three covers Playgama's form takes (square, portrait, landscape), made with Playgama's own covers script from 1920x1080 / 1080x1920 screenshots of real play and the game's title font (Lora Bold) |
 | `icon-512x512.png` | icon (same as submission-web/) |
 
+- **Art:** the GamePix-safe set (no religious-looking motifs), exactly as in the GamePix build: lotus → tulip,
+  pagoda → bonsai, temple bell → watering can, crescent moon with stars → snail, a neutral mooncake stamp, Classic
+  lotus flower → camellia; in the garden scene stone lantern → garden bench, pagoda → weeping willow, lotus → water
+  lilies; the cross-shaped board → Lily Pad (with their names in every language). Covers show this art.
 - **Orientation:** both (landscape and portrait layouts; a square window works too).
 - **Languages:** English (default and fallback), French, German, Italian, Spanish, Portuguese, Dutch, Polish,
   Turkish, Russian; taken from Bridge's `platform.language` (a language picked in Settings wins).

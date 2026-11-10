@@ -147,12 +147,14 @@ node scripts/record.mjs # gameplay recordings -> docs/media
   GamePix allows no religious symbols, so this build alone swaps a few pictures for neutral garden ones (lotus ->
   tulip, pagoda -> bonsai, bell -> watering can, crescent moon -> snail, mooncake stamp, Classic lotus -> camellia;
   garden: stone lantern -> bench, pagoda -> willow, lotus -> water lilies; the cross-shaped board -> Lily Pad). All of
-  it is behind `__PLATFORM__ === 'gamepix'` checks, so the other builds are byte-for-byte unchanged.
+  it is behind `__PLATFORM__ === 'gamepix'` checks (the art also for `'playgama'`), so the other builds are byte-for-byte unchanged.
 
 - `playgama` — Playgama Bridge 2.4.1 (`--mode playgama`, vendored in `vendor/playgama-bridge/`, loaded as the first
   script in `<head>`): `bridge.initialize()` before the save is read, language from `platform.language`, the save in
   Bridge Storage only (no localStorage), `game_ready` after the loading screen, interstitials between boards only,
   rewarded extras only after Bridge's `rewarded` state (hidden when Bridge has none), pause / audio state handled.
+  It uses the GamePix build's neutral art (same pictures, garden pieces, Lily Pad board and names), as Playgama
+  allows no religious images either.
   Everything is behind `__PLATFORM__ === 'playgama'` checks; see submission-playgama/README.md.
 
 To add a portal (e.g. Samsung Instant Plays): add its name to `PLATFORMS` in `vite.config.ts`, implement

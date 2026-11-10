@@ -555,7 +555,7 @@ function drawBonus(ctx: C, face: number, p: Palette) {
   ctx.translate(50, 67);
   ctx.scale(1.12, 1.12);
   ctx.translate(-50, -62);
-  (__PLATFORM__ === 'gamepix' ? [plum, orchid, chrysanthemum, camellia] : [plum, orchid, chrysanthemum, summer])[n - 1](ctx, p);
+  ((__PLATFORM__ === 'gamepix' || __PLATFORM__ === 'playgama') ? [plum, orchid, chrysanthemum, camellia] : [plum, orchid, chrysanthemum, summer])[n - 1](ctx, p);
   ctx.restore();
 }
 

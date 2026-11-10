@@ -32,6 +32,12 @@ export default {
   async next(frame) {
     await frame.locator('[data-testid=next]').click({ force: true });
   },
+  /** scripts/playgama/shots.mjs: the web store shot's returning player (14 boards won, the main menu), made with the
+   * game's own test hooks because the Playgama build saves in Bridge Storage, not localStorage */
+  shot: {
+    query: '?menu&seed=7',
+    setup: (frame) => frame.evaluate(() => (window.__mjg.demoProgress(14), window.__mjg.showTitle())),
+  },
   async nextLevelOpened(frame) {
     await frame.waitForFunction(() => {
       const s = window.__mjg.state();

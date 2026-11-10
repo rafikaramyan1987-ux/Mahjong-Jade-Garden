@@ -651,7 +651,8 @@ const waterLilies: GardenElement = {
   },
 };
 
-if (__PLATFORM__ === 'gamepix') {
+// GamePix and Playgama builds: neutral garden elements instead of religious-looking ones
+if (__PLATFORM__ === 'gamepix' || __PLATFORM__ === 'playgama') {
   ELEMENTS[0] = bench;
   ELEMENTS[6] = willow;
   ELEMENTS[10] = waterLilies;
