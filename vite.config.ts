@@ -32,6 +32,8 @@ function gamepixHtml(): Plugin {
     'html,body{touch-action:none}',
     '.journey-list,.panel{touch-action:pan-y}',
     '#adMainContainer{z-index:2147483000!important}',
+    // GamePix has its own loading screen (below), reporting to the Player
+    '#boot{display:none!important}',
     '#gpx-loading{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#2f7f5d;color:#f7efdc;font:600 22px Georgia,serif}',
     '#gpx-loading .b{width:min(320px,70vw);height:10px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden}',
     '#gpx-loading i{display:block;height:100%;width:0;background:#ecca7c;transition:width .2s}',
@@ -53,11 +55,33 @@ function gamepixHtml(): Plugin {
   };
 }
 
+/**
+ * Single-file builds: move the inlined game script (and its big inlined stylesheet with the fonts) from <head> to
+ * the end of <body>, so the browser paints the small loading screen as soon as the first bytes arrive.
+ */
+function scriptLast(): Plugin {
+  return {
+    name: 'script-last',
+    enforce: 'post',
+    // after vite-plugin-singlefile (also order: 'post', earlier in the plugin list) has inlined everything
+    generateBundle: { order: 'post', handler(_o, bundle) {
+      const html = Object.values(bundle).find((a) => a.type === 'asset' && a.fileName.endsWith('.html'));
+      if (!html || html.type !== 'asset' || typeof html.source !== 'string') return;
+      let src = html.source;
+      const moved: string[] = [];
+      src = src.replace(/<script type="module"[^>]*>[\s\S]*?<\/script>\s*/g, (m) => (moved.push(m.trim()), ''));
+      src = src.replace(/<style rel="stylesheet"[^>]*>[\s\S]*?<\/style>\s*/g, (m) => (moved.unshift(m.trim()), ''));
+      if (moved.length) src = src.replace('</body>', moved.join('\n') + '\n</body>');
+      html.source = src;
+    } },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const platform = platformFor(mode);
   return {
     base: './',
-    plugins: platform === 'gamepix' ? [viteSingleFile(), gamepixHtml()] : [viteSingleFile()],
+    plugins: platform === 'gamepix' ? [viteSingleFile(), gamepixHtml(), scriptLast()] : [viteSingleFile(), scriptLast()],
     // the GD game id goes into the GD build only
     define: { __PLATFORM__: JSON.stringify(platform), __GD_GAME_ID__: JSON.stringify(platform === 'gd' ? GD_GAME_ID : '') },
     build: {

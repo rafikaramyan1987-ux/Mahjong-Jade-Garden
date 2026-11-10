@@ -6,9 +6,12 @@ const PORTRAIT_BOARDS = [1, 5, 10, 16, 21, 32, 40, 48, 53, 60, 64];
 const KEY_BOARDS = [1, 32, 64];
 
 async function open(page: import('@playwright/test').Page, board: number) {
-  await page.goto('/?fresh');
+  await page.goto('/?fresh&menu');
   await page.waitForSelector('body[data-ready="1"]');
-  await page.evaluate((k) => window.__mjg.setJourney(k - 1), board);
+  await page.evaluate((k) => {
+    window.__mjg.setJourney(k - 1);
+    window.__mjg.showTitle();
+  }, board);
   await page.click('[data-testid=play]');
   await page.evaluate(() => window.__mjg.skipTutorial());
   return (await page.evaluate(() => window.__mjg.fill()))!;
@@ -40,3 +43,16 @@ for (const n of KEY_BOARDS)
     if (info.project.name === 'portrait') expect(f.tileWidth).toBeGreaterThanOrEqual(56);
     else expect(f.tileWidth).toBeGreaterThanOrEqual(64);
   });
+
+test('phone held sideways (844x390): tiles >= 56 px on boards 1-40 (>= 44 px on the hardest), the board stays inside its area', async ({ browser }, info) => {
+  test.skip(info.project.name !== 'portrait', 'once');
+  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  for (const n of [1, 8, 13, 24, 32, 40, 45, 57, 61, 64]) {
+    const f = await open(page, n);
+    expect(f.tileWidth, `board ${n} tile width`).toBeGreaterThanOrEqual(n <= 40 ? 56 : 44);
+    expect(f.box.y + f.box.h, `board ${n}`).toBeLessThanOrEqual(f.area.y + f.area.h + 2);
+    expect(f.box.x + f.box.w, `board ${n}`).toBeLessThanOrEqual(f.area.x + f.area.w + 2);
+  }
+  await ctx.close();
+});

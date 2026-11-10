@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { MIDGAME_GAP, UNDOS_PER_BOARD, medalFor, starsFor } from '../../src/app/app';
+import { COMBO_WINDOW, MIDGAME_GAP, UNDOS_PER_BOARD, matchPoints, medalFor, nextCombo, starTargets, starsFor } from '../../src/app/app';
 import { STRINGS } from '../../src/app/i18n';
 import { parseSave } from '../../src/app/save';
 import { ELEMENTS_PER_SEASON } from '../../src/art/garden';
 import { validateLayout } from '../../src/game/layout';
 import { boardTiles, footprint, MIN_PORTRAIT_FILL, DESKTOP_LANDSCAPE_AREA, MAX_PORTRAIT_COLS, MIN_LANDSCAPE_TILE, MIN_PORTRAIT_TILE, PHONE_PORTRAIT_AREA, tileWidthIn } from '../../src/layouts/build';
 import { BOARDS_PER_SEASON, JOURNEY_LENGTH, dailyFor, journeyLayouts, layoutAt } from '../../src/layouts/catalog';
+import { PHONE_LANDSCAPE_AREA, MIN_SHORT_TILE, SHORT_FLOOR_TILE } from '../../src/layouts/build';
+import { resetProgress } from '../../src/app/save';
 
 describe('journey catalog', () => {
   const all = journeyLayouts();
@@ -17,7 +19,7 @@ describe('journey catalog', () => {
   });
   it('every variant is a valid board of at most one tile set; tiles >= 56 px on a 390 px phone and >= 64 px on 1280 x 720', () => {
     for (const l of all)
-      for (const slots of [l.landscape, l.portrait]) {
+      for (const slots of [l.landscape, l.portrait, l.short]) {
         expect(validateLayout(slots), l.id).toEqual([]);
         expect(slots.length).toBeLessThanOrEqual(144);
       }
@@ -33,6 +35,18 @@ describe('journey catalog', () => {
       expect(tileWidthIn(boardTiles(l.landscape), DESKTOP_LANDSCAPE_AREA.w, DESKTOP_LANDSCAPE_AREA.h), l.id).toBeGreaterThanOrEqual(MIN_LANDSCAPE_TILE);
     }
   });
+  it('phones held sideways get their own variant: tiles >= 56 px up to board 40, never under 44 px', () => {
+    for (const l of all) {
+      const tw = Math.max(...[l.landscape, l.portrait, l.short].map((v) => tileWidthIn(boardTiles(v), PHONE_LANDSCAPE_AREA.w, PHONE_LANDSCAPE_AREA.h)));
+      expect(tw, l.id).toBeGreaterThanOrEqual(l.index < 40 ? MIN_SHORT_TILE : SHORT_FLOOR_TILE);
+      // about as many tiles as the other variants: equally hard on every screen
+      expect(Math.abs(l.short.length - l.landscape.length), l.id).toBeLessThanOrEqual(Math.max(14, l.landscape.length * 0.25));
+    }
+  });
+  it('the first three boards are small and quick (at most 24 tiles)', () => {
+    for (const l of all.slice(0, 3)) for (const v of [l.landscape, l.portrait, l.short]) expect(v.length, l.id).toBeLessThanOrEqual(24);
+    expect(all[3].landscape.length).toBeGreaterThan(24);
+  });
   it('gets bigger and harder along the journey', () => {
     const avg = (s: number) => all.slice(s * 16, s * 16 + 16).reduce((a, l) => a + l.landscape.length, 0) / 16;
     for (let s = 1; s < 4; s++) expect(avg(s)).toBeGreaterThan(avg(s - 1));
@@ -42,19 +56,39 @@ describe('journey catalog', () => {
     expect(layoutAt(64).index).toBeGreaterThanOrEqual(32);
     expect(dailyFor('2026-11-09')).toEqual(dailyFor('2026-11-09'));
   });
-  it('every layout has a name in both languages', () => {
-    for (const l of all) {
-      expect(STRINGS.EN[`layout.${l.family}` as keyof typeof STRINGS.EN], l.family).toBeTruthy();
-      expect(STRINGS.FR[`layout.${l.family}` as keyof typeof STRINGS.FR], l.family).toBeTruthy();
-    }
+  it('every layout has a name in every language', () => {
+    for (const l of all) for (const [lang, d] of Object.entries(STRINGS)) expect(d[`layout.${l.family}` as keyof typeof d], `${lang} ${l.family}`).toBeTruthy();
   });
 });
 
 describe('scoring and saves', () => {
-  it('stars by time and hints', () => {
-    expect(starsFor(144, 400, 0)).toBe(3);
-    expect(starsFor(144, 900, 1)).toBe(2);
-    expect(starsFor(144, 2000, 5)).toBe(1);
+  it('stars by time; combos win back time', () => {
+    const tg = starTargets(144);
+    expect(starsFor(144, tg.three)).toBe(3);
+    expect(starsFor(144, tg.three + 5)).toBe(2);
+    expect(starsFor(144, tg.three + 5, 5)).toBe(3);
+    expect(starsFor(144, tg.two + 1)).toBe(1);
+    // the first boards: 3 stars well within a minute and a half
+    expect(starTargets(18).three).toBeLessThanOrEqual(90);
+  });
+  it('combos: matches within 3 s build a multiplier (x2 .. x5) that gives bonus points', () => {
+    expect(COMBO_WINDOW).toBe(3000);
+    expect(nextCombo(0, 100)).toBe(1);
+    expect(nextCombo(1, 2900)).toBe(2);
+    expect(nextCombo(4, 3001)).toBe(1);
+    expect(matchPoints(1)).toBe(10);
+    expect(matchPoints(3)).toBe(30);
+    expect(matchPoints(9)).toBe(50);
+    expect(matchPoints(1, true)).toBe(20);
+  });
+  it('reset progress keeps the settings', () => {
+    const s = parseSave(JSON.stringify({ v: 1, journey: 12, lang: 'de', music: false, tileSize: 'large', stars: [3, 2] }));
+    const r = resetProgress(s);
+    expect(r.journey).toBe(0);
+    expect(r.stars).toEqual([]);
+    expect(r.lang).toBe('de');
+    expect(r.music).toBe(false);
+    expect(r.tileSize).toBe('large');
   });
   it('daily medals by time; ad gap and undo allowance', () => {
     expect(medalFor(100, 250)).toBe('gold');

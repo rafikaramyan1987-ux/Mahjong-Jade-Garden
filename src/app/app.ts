@@ -1,6 +1,7 @@
 /**
- * The game controller: screens (title, board, garden, dialogs), the rules of a session (timer, score, hints,
- * shuffles, stars), saving, audio and the portal hooks (ads only on user input outside play).
+ * The game controller: screens (main menu, board, journey, garden, dialogs), the rules of a session (clock, score,
+ * combos, stars, helpers), the in-game tutorial, saving, audio and the portal hooks (ads only between boards or from
+ * an explicit "Watch an ad" button).
  */
 import { Petals, drawBackground } from '../art/background';
 import { ELEMENTS, ELEMENTS_PER_SEASON, SEASON_KEYS, drawGarden, type Season } from '../art/garden';
@@ -10,12 +11,12 @@ import { Game } from '../game/game';
 import { mulberry32 } from '../game/rng';
 import { FLOWERS } from '../game/tiles';
 import { boardTiles, tileWidthIn } from '../layouts/build';
-import { BOARDS_PER_SEASON, JOURNEY_LENGTH, dailyFor, dealLayout, journeySeed, layoutAt, layoutById, type BoardLayout, type Variant } from '../layouts/catalog';
+import { BOARDS_PER_SEASON, JOURNEY_LENGTH, VARIANTS, dailyFor, dealLayout, journeySeed, layoutAt, layoutById, variantSlots, type BoardLayout, type Variant } from '../layouts/catalog';
 import { BoardView, type Rect } from '../ui/boardView';
 import { ICONS } from '../ui/icons';
 import { audio } from './audio';
-import { detectLang, getLang, setLang, t, windLetters, type StrKey } from './i18n';
-import { loadSave, saveNow, saveSoon, type BoardInProgress, type SaveData } from './save';
+import { LANGS, LANG_NAMES, browserLangs, getLang, isLang, pickLang, setLang, t, windLetters, type StrKey } from './i18n';
+import { loadSave, resetProgress, saveNow, saveSoon, type BoardInProgress, type SaveData } from './save';
 import { sdk } from './sdk';
 
 export const HINTS_PER_BOARD = 3;
@@ -26,6 +27,14 @@ export const MIDGAME_GAP = 120_000;
 /** between-board interstitials only once this many boards have been cleared */
 export const ADS_AFTER_BOARDS = 3;
 const NO_AD_MS = 2500;
+/** matches within this many ms of each other build a combo */
+export const COMBO_WINDOW = 3000;
+/** the combo multiplier stops growing here */
+export const COMBO_MAX = 5;
+/** every match made in a combo wins back this many seconds for the stars */
+export const COMBO_SECS = 1;
+/** tile width the "large tiles" setting zooms the board to (px) */
+const LARGE_TILE = 84;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string) => {
   const e = document.createElement(tag);
@@ -34,7 +43,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 };
 
-const fmtTime = (s: number) => {
+export const fmtTime = (s: number) => {
   s = Math.max(0, Math.floor(s));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -52,19 +61,64 @@ export function medalFor(tiles: number, seconds: number): Medal {
   return 'bronze';
 }
 
-/** stars for a cleared board: by hints used and time (relative to the number of tiles) */
-export function starsFor(tiles: number, seconds: number, hints: number): number {
-  let s = 1;
-  if (hints <= 2 && seconds <= tiles * 7) s++;
-  if (hints === 0 && seconds <= tiles * 4.5) s++;
-  return s;
+/** the combo after a match made `sinceLastMs` after the previous one (1 = a single match, 2+ = a combo) */
+export function nextCombo(combo: number, sinceLastMs: number): number {
+  return combo > 0 && sinceLastMs <= COMBO_WINDOW ? combo + 1 : 1;
+}
+
+/** points for a match: 10 x the combo multiplier (up to x5), +10 for a flower or season pair */
+export function matchPoints(combo: number, bonusTile = false): number {
+  return 10 * Math.min(COMBO_MAX, Math.max(1, combo)) + (bonusTile ? 10 : 0);
+}
+
+/** star times of a board (s): 3 stars within `three`, 2 within `two` (combos win back time) */
+export function starTargets(tiles: number) {
+  return { three: Math.max(30, Math.round(tiles * 4)), two: Math.max(50, Math.round(tiles * 7)) };
+}
+
+/** stars for a cleared board: by time, minus the seconds won back with combos */
+export function starsFor(tiles: number, seconds: number, comboSecs = 0): number {
+  const st = Math.max(0, seconds - comboSecs);
+  const tg = starTargets(tiles);
+  return st <= tg.three ? 3 : st <= tg.two ? 2 : 1;
 }
 
 interface Play extends BoardInProgress {
   gameObj: Game;
   combo: number;
   lastMatchAt: number;
+  /** the clock starts with the first tap on the board */
+  clockOn: boolean;
 }
+
+type Screen = 'title' | 'board' | 'garden' | 'journey';
+
+interface Hud {
+  root: HTMLElement;
+  tiles: HTMLElement;
+  bar: HTMLElement;
+  score: HTMLElement;
+  goal: HTMLElement;
+  goalStars: HTMLElement;
+  goalTime: HTMLElement;
+  tools: HTMLElement;
+  hint: HTMLButtonElement;
+  undo: HTMLButtonElement;
+  shuffle: HTMLButtonElement;
+  fit: HTMLButtonElement;
+}
+
+interface Tutorial {
+  step: number;
+  line: HTMLElement;
+  hand: HTMLElement;
+  skip: HTMLButtonElement;
+  timers: ReturnType<typeof setTimeout>[];
+  blocked: number;
+}
+
+const HAND_SVG =
+  '<svg viewBox="0 0 48 56" width="48" height="56" aria-hidden="true"><path d="M18 4.5c2.6 0 4.5 2 4.5 4.6V25l1.4-.4c.6-2 2.3-3.3 4.4-3.3 1.8 0 3.3.9 4.1 2.4.8-.6 1.9-1 3-1 2 0 3.7 1.2 4.4 3 .7-.3 1.4-.5 2.2-.5 2.6 0 4.6 2.1 4.6 4.6v10.7c0 7.6-6.1 13.6-13.6 13.6h-5.4c-4.2 0-8.1-2-10.6-5.4L6.2 33.5a4.3 4.3 0 0 1 6.5-5.6l.8.9V9.1c0-2.6 2-4.6 4.5-4.6z" fill="#fffaf0" stroke="#203a2e" stroke-width="2.6" stroke-linejoin="round"/><path d="M27.6 30v9M35 30v9M42 31v8" stroke="#203a2e" stroke-width="2" stroke-linecap="round" opacity=".45"/></svg>';
 
 class App {
   save: SaveData;
@@ -75,12 +129,11 @@ class App {
   private view: BoardView;
   private petals: Petals;
   private play: Play | null = null;
-  private screen: 'title' | 'board' | 'garden' | 'journey' = 'title';
+  private screen: Screen = 'title';
   private layer: HTMLElement | null = null;
   private modal: HTMLElement | null = null;
-  private hud: { root: HTMLElement; stats: Record<string, HTMLElement>; tools: HTMLElement; hint: HTMLButtonElement; undo: HTMLButtonElement; shuffle: HTMLButtonElement; fit: HTMLButtonElement } | null = null;
-  private tutStep = 0;
-  private tutEl: HTMLElement | null = null;
+  private hud: Hud | null = null;
+  private tut: Tutorial | null = null;
   private adPaused = false;
   private prerollDone = false;
   /** time of the last interstitial (pre-roll or between boards), for the ~2 minute gap */
@@ -89,14 +142,16 @@ class App {
   private H = 0;
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private fresh: boolean;
+  /** the garden element restored by the last journey win, to bloom on the journey map */
+  private pendingBloom: { season: Season; index: number } | null = null;
+  private stuckTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     const q = new URLSearchParams(location.search);
     this.fresh = q.has('fresh');
     this.save = this.fresh ? loadSave({ getItem: () => null, setItem: () => {} }) : loadSave();
     const ql = q.get('lang');
-    const portalLang = (sdk.locale() ?? '').toLowerCase();
-    setLang(ql === 'fr' || ql === 'en' ? ql : (this.save.lang ?? (portalLang ? (portalLang.startsWith('fr') ? 'fr' : 'en') : detectLang())));
+    setLang(isLang(ql) ? ql : pickLang(this.save.lang, sdk.locale(), browserLangs()));
     this.fx = document.createElement('canvas');
     this.fx.id = 'fx';
     this.bg.after(this.fx);
@@ -104,6 +159,7 @@ class App {
     this.view = new BoardView(this.boardCanvas, this.faceOptions());
     this.view.highlightFree = this.save.highlightFree;
     this.view.reducedMotion = this.reducedMotion;
+    this.view.preferTile = this.save.tileSize === 'large' ? LARGE_TILE : 0;
     this.view.onTap = (i) => this.onTileTap(i);
     this.view.onZoomChange = (z) => this.hud?.fit.classList.toggle('show', z);
     audio.setMusic(this.save.music);
@@ -113,12 +169,13 @@ class App {
       audio.setAdMuted(p);
       this.syncGameplay();
     };
-    // the portal's mute setting
+    // the portal's mute setting (CrazyGames muteAudio, GamePix soundOff)
     audio.setPlatformMuted(sdk.muted);
     sdk.onMute = (m) => audio.setPlatformMuted(m);
     const unlock = () => audio.unlock();
     addEventListener('pointerdown', unlock, { capture: true });
     addEventListener('keydown', unlock, { capture: true });
+    addEventListener('keydown', (e) => this.onKey(e));
     addEventListener('resize', () => this.resize());
     addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
     document.addEventListener('visibilitychange', () => {
@@ -134,7 +191,6 @@ class App {
   }
 
   persist(now = false) {
-    if (this.fresh) return;
     if (this.play && !this.play.gameObj.won) {
       const p = this.play;
       this.save.current = {
@@ -152,8 +208,13 @@ class App {
         hintsLeft: p.hintsLeft,
         undosLeft: p.undosLeft,
         streak: p.streak,
+        rescueUsed: p.rescueUsed,
+        comboSecs: p.comboSecs,
+        bestCombo: p.bestCombo,
       };
     }
+    // ?fresh (tests, recordings): progress lives in memory only
+    if (this.fresh) return;
     if (now) saveNow(this.save);
     else saveSoon(this.save);
   }
@@ -168,6 +229,7 @@ class App {
     const portrait = H > W * 1.05;
     document.body.classList.toggle('portrait', portrait);
     document.body.classList.toggle('landscape', !portrait);
+    document.body.classList.toggle('short', !portrait && H < 520);
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     this.bg.width = Math.round(W * dpr);
     this.bg.height = Math.round(H * dpr);
@@ -180,8 +242,9 @@ class App {
     if (this.reducedMotion) this.petals.still();
     else this.petals.start();
     this.view.resize(W, H, dpr, this.boardArea());
-    if (this.tutEl) this.placeTutorial();
+    if (this.tut) this.placeTutorial();
     if (this.screen === 'garden') this.renderGardenCanvas();
+    if (this.screen === 'title') this.renderTitleGarden();
   }
 
   private boardArea(): Rect {
@@ -191,7 +254,7 @@ class App {
     const top = this.hud.root.getBoundingClientRect().bottom;
     const portrait = document.body.classList.contains('portrait');
     const tools = this.hud.tools.getBoundingClientRect();
-    // small margins: the board uses almost the whole screen (8 px at the sides, 6 px under / above the bars)
+    // small margins: the board uses almost the whole screen
     const mx = 8;
     const my = 6;
     if (portrait) return { x: mx, y: top + my, w: W - mx * 2, h: tools.top - top - my * 2 };
@@ -202,61 +265,84 @@ class App {
 
   private clearLayer() {
     this.closeModal();
-    this.closeTutorial();
+    this.endTutorial(false);
+    this.clearStuckTimer();
     this.layer?.remove();
     this.layer = null;
     this.hud = null;
+    document.querySelectorAll('.float').forEach((e) => e.remove());
   }
 
+  /** a new screen fades in over the old one (no hard cuts) */
+  private enter(layer: HTMLElement) {
+    if (!this.reducedMotion) layer.classList.add('enter');
+  }
+
+  /** the main menu, over the garden art */
   showTitle() {
     this.leaveBoard();
     this.clearLayer();
     this.screen = 'title';
     this.view.setGame(null);
-    const s = el('div', 'screen');
+    const s = el('div', 'screen title-screen');
+    s.dataset.testid = 'title-screen';
+    const art = el('canvas', 'garden-bg');
+    const shade = el('div', 'title-shade');
     const wrap = el('div', 'title-wrap');
     const logo = el('div', 'logo');
     const tiles = el('canvas', 'tiles');
-    logo.append(tiles);
-    logo.append(el('div', 'mj', t('title.mahjong')), el('div', 'jg', t('title.jadeGarden')));
-    const rule = el('div', 'rule', '<i></i>' + ICONS.leaf.replace('width="24" height="24"', 'width="18" height="18"') + '<i></i>');
-    logo.append(rule, el('div', 'tag', t('title.tagline')));
-    wrap.append(logo);
+    logo.append(tiles, el('div', 'mj', t('title.mahjong')), el('div', 'jg', t('title.jadeGarden')));
     const menu = el('div', 'menu');
     const cur = this.save.current;
     const boardN = this.save.journey + 1;
+    const cont = !!cur && cur.mode === 'journey';
     const play = this.button(
-      `${ICONS.play}<span>${cur && cur.mode === 'journey' ? t('menu.continue') : t('menu.play')}<br><span class="sub">${t('menu.board', { n: boardN })} · ${t(`layout.${layoutAt(this.save.journey).family}` as StrKey)}</span></span>`,
-      'btn primary',
+      `${ICONS.play}<span class="lbl">${cont ? t('menu.continue') : t('menu.play')}<span class="sub">${t('menu.board', { n: boardN })} · ${t(`layout.${layoutAt(this.save.journey).family}` as StrKey)}</span></span>`,
+      'btn primary big',
       () => void this.onPlay(),
     );
     play.dataset.testid = 'play';
-    const daily = this.button(`${ICONS.calendar}<span>${t('menu.daily')}<br><span class="sub" data-testid="daily-note">${this.dailyNote()}</span></span>`, 'btn', () => this.startDaily());
-    daily.dataset.testid = 'daily';
-    const journeyBtn = this.button(`${ICONS.star}<span>${t('menu.journey')}</span>`, 'btn small', () => this.showJourney());
+    const done = Math.min(this.save.journey, JOURNEY_LENGTH);
+    const journeyBtn = this.button(`${ICONS.map}<span class="lbl">${t('menu.journey')}<span class="sub">${t('journey.count', { n: done, total: JOURNEY_LENGTH })}</span></span>`, 'btn', () => this.showJourney());
     journeyBtn.dataset.testid = 'journey';
-    const garden = this.button(`${ICONS.leaf}<span>${t('menu.garden')}</span>`, 'btn small', () => this.showGarden());
-    garden.dataset.testid = 'garden';
-    const row1 = el('div', 'row');
-    row1.append(journeyBtn, garden);
-    const row = el('div', 'row');
-    const stats = this.button(`${ICONS.chart}<span>${t('menu.stats')}</span>`, 'btn small', () => this.openStats());
-    const settings = this.button(`${ICONS.gear}<span>${t('menu.settings')}</span>`, 'btn small', () => this.openSettings());
-    stats.dataset.testid = 'stats';
+    const daily = this.button(`${ICONS.calendar}<span class="lbl">${t('menu.daily')}<span class="sub" data-testid="daily-note">${this.dailyNote()}</span></span>`, 'btn', () => this.startDaily());
+    daily.dataset.testid = 'daily';
+    const settings = this.button(`${ICONS.gear}<span class="lbl">${t('menu.settings')}</span>`, 'btn', () => this.openSettings());
     settings.dataset.testid = 'settings';
-    row.append(stats, settings);
-    menu.append(play, daily, row1, row);
-    wrap.append(menu);
-    s.append(wrap);
+    menu.append(play, journeyBtn, daily, settings);
+    wrap.append(logo, menu);
+    s.append(art, shade, wrap);
     this.ui.append(s);
     this.layer = s;
+    this.enter(s);
     this.drawTitleTiles(tiles);
     this.resize();
   }
 
+  /** the menu backdrop: the current season's garden in full bloom */
+  private renderTitleGarden() {
+    const c = this.layer?.querySelector('canvas.garden-bg') as HTMLCanvasElement | null;
+    if (!c) return;
+    const season = Math.min(3, Math.floor(this.save.journey / ELEMENTS_PER_SEASON)) as Season;
+    this.paintGarden(c, this.W, this.H, { season, restored: ELEMENTS_PER_SEASON });
+  }
+
+  /** draw the garden into a canvas at the screen's pixel density */
+  private paintGarden(c: HTMLCanvasElement, W: number, H: number, v: Parameters<typeof drawGarden>[5]) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    c.width = Math.round(W * dpr);
+    c.height = Math.round(H * dpr);
+    c.style.width = W + 'px';
+    c.style.height = H + 'px';
+    const ctx = c.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawGarden(ctx, 0, 0, W, H, v);
+  }
+
   private drawTitleTiles(c: HTMLCanvasElement) {
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    const tw = Math.round(Math.min(64, Math.max(44, innerWidth * 0.06)));
+    const short = innerHeight < 520;
+    const tw = Math.round(Math.min(short ? 40 : 60, Math.max(38, Math.min(innerWidth, innerHeight) * 0.09)));
     const m = tileMetrics(tw);
     const sp = new TileSprites(m, dpr, this.faceOptions());
     const W = tw * 4.2;
@@ -301,7 +387,7 @@ class App {
   }
 
   private async onPlay() {
-    // pre-roll interstitial: only from this click, once per session
+    // pre-roll interstitial (GameDistribution only): only from this click, once per session
     if (!this.prerollDone) {
       this.prerollDone = true;
       if (sdk.adSlot('preroll')) {
@@ -314,18 +400,26 @@ class App {
     else this.startJourney();
   }
 
-  /** the layout variant (wide or tall) that gives the biggest tiles in the current board area */
+  /** the layout variant (wide, tall or short) that gives the biggest tiles in the current board area */
   private chooseVariant(l: BoardLayout): Variant {
     const area = this.boardArea();
-    const wl = tileWidthIn(boardTiles(l.landscape), area.w, area.h);
-    const wp = tileWidthIn(boardTiles(l.portrait), area.w, area.h);
-    return wp > wl ? 'portrait' : 'landscape';
+    let best: Variant = 'landscape';
+    let bw = 0;
+    for (const v of VARIANTS) {
+      const w = tileWidthIn(boardTiles(variantSlots(l, v)), area.w, area.h);
+      if (w > bw + 0.5) {
+        bw = w;
+        best = v;
+      }
+    }
+    return best;
   }
 
-  startJourney() {
+  startJourney(): void {
     const n = this.save.journey;
     // the journey board in progress is kept; a replay in progress is dropped
     if (this.save.current?.mode === 'replay') this.save.current = null;
+    if (this.save.current?.mode === 'journey') return this.resumeBoard(this.save.current);
     const layout = layoutAt(n);
     const q = new URLSearchParams(location.search);
     const seed = q.has('seed') ? Number(q.get('seed')) : journeySeed(n);
@@ -340,7 +434,7 @@ class App {
     this.startBoard('daily', layout, seed, day);
   }
 
-  /** replay a finished journey board (the same deal); best stars / time update only if better */
+  /** replay a finished journey board (the same deal); best stars / time / score update only if better */
   startReplay(n: number) {
     this.startBoard('replay', layoutAt(n), journeySeed(n), undefined, n + 1);
   }
@@ -366,14 +460,18 @@ class App {
       shufflesLeft: SHUFFLES_PER_BOARD,
       undosLeft: UNDOS_PER_BOARD,
       streak: 0,
+      rescueUsed: false,
+      comboSecs: 0,
+      bestCombo: 0,
       combo: 0,
       lastMatchAt: 0,
+      clockOn: false,
     };
     this.save.stats.played++;
     this.attachBoard();
   }
 
-  private resumeBoard(cur: BoardInProgress) {
+  private resumeBoard(cur: BoardInProgress): void {
     this.enterBoardScreen();
     let game: Game;
     try {
@@ -382,7 +480,7 @@ class App {
       this.save.current = null;
       return this.startJourney();
     }
-    this.play = { ...cur, gameObj: game, combo: 0, lastMatchAt: 0 };
+    this.play = { ...cur, gameObj: game, combo: 0, lastMatchAt: 0, clockOn: false };
     this.attachBoard();
   }
 
@@ -391,44 +489,47 @@ class App {
     this.view.setGame(p.gameObj);
     this.resize();
     this.view.setGame(p.gameObj);
+    if (!this.reducedMotion) this.boardCanvas.animate([{ opacity: 0, transform: 'scale(0.97)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'ease-out' });
     this.updateHud();
     this.persist();
     this.syncGameplay();
-    if (!this.save.tutorialDone && p.mode === 'journey') this.startTutorial();
-    else if (p.gameObj.stuck) this.openStuck();
+    if (!this.save.tutorialDone && p.mode === 'journey' && p.board === 1 && p.gameObj.history.length === 0) this.startTutorial();
+    else if (p.gameObj.stuck) this.scheduleStuck(300);
   }
 
   private enterBoardScreen() {
     this.clearLayer();
     this.screen = 'board';
-    const root = el('div');
+    const root = el('div', 'board-layer');
     const hud = el('div', 'hud');
-    const menuBtn = this.button(ICONS.menu, 'icon-btn', () => this.openPause());
-    menuBtn.setAttribute('aria-label', t('btn.menu'));
-    menuBtn.dataset.testid = 'menu';
-    const statsEl = el('div', 'stats');
-    const stats: Record<string, HTMLElement> = {};
-    for (const [k, key] of [
-      ['matches', 'hud.matches'],
-      ['time', 'hud.time'],
-      ['score', 'hud.score'],
-      ['tiles', 'hud.tiles'],
-    ] as [string, StrKey][]) {
+    const pauseBtn = this.button(ICONS.pause, 'icon-btn', () => this.openPause());
+    pauseBtn.setAttribute('aria-label', t('btn.pause'));
+    pauseBtn.dataset.testid = 'menu';
+    // goal: tiles left with a progress bar, the score, and the star target
+    const mid = el('div', 'hud-mid');
+    const stat = (key: StrKey, id: string) => {
       const s = el('div', 'stat');
-      s.dataset.stat = k;
+      s.dataset.stat = id;
       s.append(el('div', 'k', t(key)));
       const v = el('div', 'v', '0');
       s.append(v);
-      stats[k] = v;
-      statsEl.append(s);
-    }
-    const gear = this.button(ICONS.gear, 'icon-btn', () => this.openSettings());
-    gear.setAttribute('aria-label', t('btn.settings'));
-    gear.dataset.testid = 'hud-settings';
-    hud.append(menuBtn, statsEl, gear);
+      return [s, v] as const;
+    };
+    const [tilesS, tilesV] = stat('hud.tilesLeft', 'tiles');
+    const [scoreS, scoreV] = stat('hud.score', 'score');
+    const statsRow = el('div', 'stats');
+    statsRow.append(tilesS, scoreS);
+    const bar = el('div', 'progress', '<i></i>');
+    mid.append(statsRow, bar);
+    const goal = el('div', 'goal');
+    goal.dataset.testid = 'goal';
+    const goalStars = el('div', 'goal-stars', [0, 1, 2].map(() => `<i>${ICONS.star}</i>`).join(''));
+    const goalTime = el('div', 'goal-time', '');
+    goal.append(goalStars, goalTime);
+    hud.append(pauseBtn, mid, goal);
     const tools = el('div', 'tools');
     const tool = (icon: string, label: StrKey, fn: () => void, id: string) => {
-      const b = this.button(`${icon}<span>${t(label)}</span><span class="badge"></span>`, 'tool', fn);
+      const b = this.button(`${icon}<span class="tl">${t(label)}</span><span class="badge"></span>`, 'tool', fn);
       b.dataset.testid = id;
       tools.append(b);
       return b;
@@ -441,13 +542,10 @@ class App {
     root.append(hud, tools, fit);
     this.ui.append(root);
     this.layer = root;
-    this.hud = { root: hud, stats, tools, hint, undo, shuffle, fit };
-    // the fit button sits just under the HUD on the left
-    requestAnimationFrame(() => {
-      const r = hud.getBoundingClientRect();
-      fit.style.left = '10px';
-      fit.style.top = r.bottom + 8 + 'px';
-    });
+    this.enter(root);
+    this.hud = { root: hud, tiles: tilesV, bar: bar.firstElementChild as HTMLElement, score: scoreV, goal, goalStars, goalTime, tools, hint, undo, shuffle, fit };
+    // the fit button sits just under the bar on the left (placed now: no layout jump later)
+    fit.style.top = hud.getBoundingClientRect().bottom + 8 + 'px';
   }
 
   private leaveBoard() {
@@ -462,16 +560,15 @@ class App {
     const h = this.hud;
     if (!p || !h) return;
     const g = p.gameObj;
-    h.stats.matches.textContent = String(g.openMatches().length);
-    h.stats.time.textContent = fmtTime(p.time);
-    h.stats.score.textContent = String(p.score);
-    h.stats.tiles.textContent = String(g.remaining);
-    h.stats.time.parentElement!.classList.toggle('hidden', !this.save.showTimer);
-    // a count while some are left; "+1" (rewarded ad) once they run out
+    h.tiles.textContent = String(g.remaining);
+    h.score.textContent = String(p.score);
+    h.bar.style.width = `${((g.total - g.remaining) / Math.max(1, g.total)) * 100}%`;
+    this.updateGoal();
+    // a count while some are left; a TV and "+1" (rewarded ad) once they run out
     const badge = (b: HTMLButtonElement, left: number) => {
-      const el2 = b.querySelector('.badge') as HTMLElement;
-      el2.textContent = left > 0 ? String(left) : '+1';
-      el2.classList.toggle('plus', left <= 0);
+      const e = b.querySelector('.badge') as HTMLElement;
+      e.innerHTML = left > 0 ? String(left) : `${sdk.name === 'web' ? '' : ICONS.tv}+1`;
+      e.classList.toggle('plus', left <= 0);
       b.dataset.out = String(left <= 0);
     };
     badge(h.hint, p.hintsLeft);
@@ -480,12 +577,27 @@ class App {
     h.undo.disabled = g.history.length === 0;
   }
 
+  /** the star target: the stars still in reach and the time left for them */
+  private updateGoal() {
+    const p = this.play;
+    const h = this.hud;
+    if (!p || !h) return;
+    const tg = starTargets(p.gameObj.total);
+    const st = Math.max(0, p.time - (p.comboSecs ?? 0));
+    const stars = st <= tg.three ? 3 : st <= tg.two ? 2 : 1;
+    h.goalStars.querySelectorAll('i').forEach((e, k) => e.classList.toggle('on', k < stars));
+    h.goalTime.textContent = stars === 3 ? fmtTime(tg.three - st) : stars === 2 ? fmtTime(tg.two - st) : t('hud.finish');
+    h.goal.dataset.stars = String(stars);
+    h.goal.title = t('hud.goalHint', { time: fmtTime(tg.three) });
+    h.goal.classList.toggle('low', stars > 1 && (stars === 3 ? tg.three : tg.two) - st <= 10);
+  }
+
   private tick() {
     const p = this.play;
-    if (!p || this.screen !== 'board' || this.modal || this.adPaused || document.hidden || p.gameObj.won) return;
-    if (this.tutEl) return;
+    if (!p || this.screen !== 'board' || this.modal || this.adPaused || document.hidden || p.gameObj.won || !p.clockOn) return;
+    if (this.tut && this.tut.step < 3) return;
     p.time++;
-    if (this.hud) this.hud.stats.time.textContent = fmtTime(p.time);
+    this.updateGoal();
     if (p.time % 10 === 0) this.persist();
   }
 
@@ -500,9 +612,12 @@ class App {
       }
       return;
     }
+    p.clockOn = true;
     if (!g.isFree(i)) {
+      // a soft shake and a gentle sound, never a harsh error
       audio.play('mismatch');
       this.view.shakeTile(i);
+      if (this.tut && this.tut.step === 2 && i === this.tut.blocked) this.tutorialStep(3);
       return;
     }
     const sel = this.view.selected;
@@ -510,15 +625,18 @@ class App {
       this.view.selected = sel === i ? -1 : i;
       audio.play('select');
       this.view.invalidate();
+      if (this.tut?.step === 1) this.tutorialHand();
       return;
     }
     if (g.canMatch(sel, i)) {
       this.doMatch(sel, i);
     } else {
-      // a different tile: select it instead (gentle, no penalty)
+      // a different picture: that tile is selected instead, with a soft shake of the first one
+      this.view.shakeTile(sel);
       this.view.selected = i;
       audio.play('select');
       this.view.invalidate();
+      if (this.tut?.step === 1) this.tutorialHand();
     }
   }
 
@@ -528,23 +646,43 @@ class App {
     const bonus = g.faces[a] >= FLOWERS;
     g.match(a, b);
     this.view.selected = -1;
-    this.view.removeAnim(a, b);
     const now = performance.now();
-    p.combo = now - p.lastMatchAt < 5000 ? Math.min(5, p.combo + 1) : 0;
-    audio.play('match', p.combo);
+    p.combo = nextCombo(p.combo, now - p.lastMatchAt);
     p.lastMatchAt = now;
-    p.score += 10 + p.combo * 2 + (bonus ? 10 : 0);
+    p.bestCombo = Math.max(p.bestCombo ?? 0, p.combo);
+    const pts = matchPoints(p.combo, bonus);
+    p.score += pts;
+    if (p.combo >= 2) p.comboSecs = (p.comboSecs ?? 0) + COMBO_SECS;
+    const at = this.view.removeAnim(a, b, p.combo);
+    audio.play('match', p.combo - 1);
+    if (p.combo >= 2) audio.play('combo', p.combo);
+    this.floatLabel(at, pts, p.combo);
     this.save.stats.tilesMatched += 2;
-    if (this.tutStep === 1 && this.view.spotlight.includes(a)) this.tutorialNext();
+    if (this.tut) {
+      if (this.tut.step === 1 || this.tut.step === 2) this.tutorialStep(this.tut.step + 1);
+      else if (this.tut.step === 3) this.endTutorial(true);
+    }
     this.updateHud();
     this.persist();
-    if (g.won) setTimeout(() => this.onWin(), 550);
-    else if (g.stuck) setTimeout(() => this.play?.gameObj.stuck && !this.modal && this.openStuck(), 600);
+    if (g.won) setTimeout(() => this.onWin(), 620);
+    else if (g.stuck) this.scheduleStuck(650);
+  }
+
+  /** "+20" and, in a combo, "Combo x2" rising from where the tiles met */
+  private floatLabel([x, y]: [number, number], pts: number, combo: number) {
+    const f = el('div', `float${combo >= 2 ? ' combo' : ''}`);
+    f.dataset.testid = combo >= 2 ? 'combo' : 'points';
+    if (combo >= 2) f.append(el('b', '', t('hud.combo', { n: Math.min(combo, COMBO_MAX) })));
+    f.append(el('span', '', `+${pts}${combo >= 2 ? ` · +${COMBO_SECS}s` : ''}`));
+    f.style.left = Math.round(Math.max(70, Math.min(this.W - 70, x))) + 'px';
+    f.style.top = Math.round(Math.max(90, y)) + 'px';
+    this.ui.append(f);
+    setTimeout(() => f.remove(), 1100);
   }
 
   private onHint() {
     const p = this.play;
-    if (!p) return;
+    if (!p || this.modal) return;
     if (p.hintsLeft <= 0) return this.offerExtra('hint');
     const m = p.gameObj.hint();
     if (!m) return this.openStuck();
@@ -559,7 +697,7 @@ class App {
 
   private onUndo() {
     const p = this.play;
-    if (!p || !p.gameObj.history.length) return;
+    if (!p || this.modal || !p.gameObj.history.length) return;
     if ((p.undosLeft ?? UNDOS_PER_BOARD) <= 0) return this.offerExtra('undo');
     const h = p.gameObj.undo();
     if (!h) return;
@@ -576,22 +714,24 @@ class App {
 
   private onShuffle() {
     const p = this.play;
-    if (!p) return;
+    if (!p || this.modal) return;
     if (p.shufflesLeft <= 0) return this.offerExtra('shuffle');
-    this.doShuffle();
+    this.doShuffle(true);
   }
 
-  private doShuffle() {
+  /** shuffle the remaining tiles into a solvable position; `useOne` takes one of the board's shuffles */
+  private doShuffle(useOne: boolean) {
     const p = this.play!;
     if (!p.gameObj.shuffle(mulberry32((Date.now() ^ p.seed) >>> 0))) {
       this.toast(t('stuck.cannot'));
       return;
     }
-    p.shufflesLeft = Math.max(0, p.shufflesLeft - 1);
+    if (useOne) p.shufflesLeft = Math.max(0, p.shufflesLeft - 1);
     audio.play('shuffle');
     this.view.selected = -1;
     this.view.hint = null;
     this.view.invalidate();
+    if (!this.reducedMotion) this.boardCanvas.animate([{ filter: 'brightness(1.25)', transform: 'scale(0.985)' }, { filter: 'none', transform: 'none' }], { duration: 420, easing: 'ease-out' });
     this.updateHud();
     this.persist();
   }
@@ -602,11 +742,35 @@ class App {
     setTimeout(() => tt.remove(), ms);
   }
 
+  // ------------------------------------------------------------ keyboard
+
+  /**
+   * Optional shortcuts by physical key (KeyboardEvent.code, so QWERTY and AZERTY behave the same): H hint, U undo,
+   * S shuffle, P pause / resume. Escape is never used, nor Ctrl / Cmd / Alt combinations.
+   */
+  private onKey(e: KeyboardEvent) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    const typing = !!target && (target.tagName === 'SELECT' || target.tagName === 'INPUT');
+    // the game page never scrolls (the portal page around it must not move either)
+    if (!typing && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(e.code) && target?.tagName !== 'BUTTON') e.preventDefault();
+    if (e.repeat || typing || this.screen !== 'board' || !this.play || this.adPaused) return;
+    if (e.code === 'KeyP') {
+      if (this.modal?.querySelector('[data-testid=pause]')) this.closeModal();
+      else if (!this.modal) this.openPause();
+      return;
+    }
+    if (this.modal) return;
+    if (e.code === 'KeyH') this.onHint();
+    else if (e.code === 'KeyU') this.onUndo();
+    else if (e.code === 'KeyS') this.onShuffle();
+  }
+
   // ------------------------------------------------------------ ads
 
   /**
-   * A button that asks for a rewarded ad. Settles once; when there is no reward it shows "No ad available right
-   * now, try later" for 2.5 s and re-enables.
+   * A button that asks for a rewarded ad. Settles once; the reward only when the ad really completed; otherwise it
+   * shows "No ad available right now, try later" for 2.5 s and re-enables.
    */
   private adButton(label: string, onReward: () => void, cls = 'btn primary') {
     const b = this.button(label, cls, async () => {
@@ -629,15 +793,15 @@ class App {
     return b;
   }
 
-  /** label of a rewarded button: "Watch an ad: +1 Hint" (portal builds) or "+1 Hint" (web build: free) */
-  private rewardLabel(icon: string, what: string) {
-    return sdk.name === 'web' ? `${icon}<span>${t('ad.plus', { what })}</span>` : `${ICONS.play}<span>${t('ad.watchPlus', { what })}</span>`;
+  /** label of a rewarded button: a TV icon + "Watch an ad: +1 hint" (portal builds) or "+1 hint" (web build: free) */
+  private rewardLabel(icon: string, key: StrKey) {
+    return sdk.name === 'web' ? `${icon}<span>${t('ad.free', { what: t(key) })}</span>` : `${ICONS.tv}<span>${t('ad.watchFor', { what: t(key) })}</span>`;
   }
 
   private offerExtra(kind: 'hint' | 'shuffle' | 'undo') {
     const panel = this.openModal();
     panel.dataset.testid = `offer-${kind}`;
-    const title: Record<typeof kind, StrKey> = { hint: 'ad.extraHint', shuffle: 'ad.extraShuffle', undo: 'ad.extraUndo' };
+    const title: Record<typeof kind, StrKey> = { hint: 'ad.outHint', shuffle: 'ad.outShuffle', undo: 'ad.outUndo' };
     panel.append(el('h2', '', t(title[kind])));
     if (sdk.name !== 'web') panel.append(el('p', '', t('ad.offer')));
     const grant = () => {
@@ -649,16 +813,18 @@ class App {
         this.onHint();
       } else if (kind === 'shuffle') {
         p.shufflesLeft++;
-        this.doShuffle();
+        this.doShuffle(true);
       } else {
         p.undosLeft = (p.undosLeft ?? 0) + 1;
         this.onUndo();
       }
     };
     const icon = { hint: ICONS.hint, shuffle: ICONS.shuffle, undo: ICONS.undo }[kind];
-    const what = t(kind === 'hint' ? 'btn.hint' : kind === 'shuffle' ? 'btn.shuffle' : 'btn.undo');
-    panel.append(this.adButton(this.rewardLabel(icon, what), grant));
-    panel.append(this.button(t('btn.close'), 'btn ghost', () => this.closeModal()));
+    const what: Record<typeof kind, StrKey> = { hint: 'ad.oneHint', shuffle: 'ad.oneShuffle', undo: 'ad.oneUndo' };
+    panel.append(this.adButton(this.rewardLabel(icon, what[kind]), grant));
+    const no = this.button(t('btn.noThanks'), 'btn ghost', () => this.closeModal());
+    no.dataset.testid = 'no-thanks';
+    panel.append(no);
   }
 
   // ------------------------------------------------------------ dialogs
@@ -674,16 +840,16 @@ class App {
     else sdk.gameplayStop();
   }
 
-  private openModal(): HTMLElement {
+  private openModal(cls = ''): HTMLElement {
     this.closeModal();
     const back = el('div', 'backdrop');
-    const panel = el('div', 'panel');
+    const panel = el('div', `panel ${cls}`);
     panel.setAttribute('role', 'dialog');
     back.append(panel);
     this.ui.append(back);
     this.modal = back;
     this.syncGameplay();
-    if (this.tutEl) this.tutEl.style.visibility = 'hidden';
+    if (this.tut) this.tut.line.parentElement!.style.visibility = 'hidden';
     return panel;
   }
 
@@ -691,38 +857,34 @@ class App {
     this.modal?.remove();
     this.modal = null;
     this.syncGameplay();
-    if (this.tutEl) this.tutEl.style.visibility = '';
+    if (this.tut) this.tut.line.parentElement!.style.visibility = '';
   }
 
   private openPause() {
+    if (!this.play) return;
     const panel = this.openModal();
+    panel.dataset.testid = 'pause';
     panel.append(el('h2', '', t('pause.title')));
-    if (this.play) panel.append(el('p', '', this.boardLabel(this.play)));
+    panel.append(el('p', 'sub-title', this.boardLabel(this.play)));
     const resume = this.button(`${ICONS.play}<span>${t('btn.resume')}</span>`, 'btn primary', () => this.closeModal());
     resume.dataset.testid = 'resume';
-    panel.append(resume);
-    panel.append(
-      this.button(t('btn.restart'), 'btn', () => {
-        const p = this.play;
-        if (!p) return;
-        // same deal from the start
-        while (p.gameObj.history.length) p.gameObj.undo();
-        p.time = 0;
-        p.score = 0;
-        p.hints = 0;
-        p.hintsLeft = HINTS_PER_BOARD;
-        p.shufflesLeft = SHUFFLES_PER_BOARD;
-        p.undosLeft = UNDOS_PER_BOARD;
-        this.closeModal();
-        this.view.setGame(p.gameObj);
-        this.updateHud();
-        this.persist();
-      }),
-    );
-    panel.append(this.button(t('menu.settings'), 'btn', () => this.openSettings()));
-    const menu = this.button(t('btn.menu'), 'btn', () => this.showTitle());
+    const settings = this.button(`${ICONS.gear}<span>${t('menu.settings')}</span>`, 'btn', () => this.openSettings(() => this.openPause()));
+    settings.dataset.testid = 'pause-settings';
+    const menu = this.button(`${ICONS.home}<span>${t('btn.mainMenu')}</span>`, 'btn', () => this.showTitle());
     menu.dataset.testid = 'to-menu';
-    panel.append(menu);
+    const restart = this.button(`${ICONS.reset}<span>${t('btn.restart')}</span>`, 'btn ghost', () => {
+      const p = this.play;
+      if (!p) return;
+      // same deal from the start
+      while (p.gameObj.history.length) p.gameObj.undo();
+      Object.assign(p, { time: 0, score: 0, hints: 0, hintsLeft: HINTS_PER_BOARD, shufflesLeft: SHUFFLES_PER_BOARD, undosLeft: UNDOS_PER_BOARD, rescueUsed: false, comboSecs: 0, bestCombo: 0, combo: 0, clockOn: false });
+      this.closeModal();
+      this.view.setGame(p.gameObj);
+      this.updateHud();
+      this.persist();
+    });
+    restart.dataset.testid = 'restart';
+    panel.append(resume, settings, menu, restart);
   }
 
   /** "Board 5 · Plum Blossom" or "Daily Challenge · Plum Blossom" */
@@ -733,38 +895,52 @@ class App {
     return `${t('menu.board', { n: p.board ?? (l ? l.index + 1 : 1) })} · ${name}`;
   }
 
+  private clearStuckTimer() {
+    if (this.stuckTimer) clearTimeout(this.stuckTimer);
+    this.stuckTimer = null;
+  }
+
+  /** no moves left: offer Shuffle automatically (after the match animation) */
+  private scheduleStuck(ms: number) {
+    this.clearStuckTimer();
+    this.stuckTimer = setTimeout(() => {
+      this.stuckTimer = null;
+      if (this.play?.gameObj.stuck && !this.modal && !this.play.gameObj.won) this.openStuck();
+    }, ms);
+  }
+
+  /**
+   * No moves left: never a dead end. The first time on a board Shuffle is free; then a shuffle of the board's own
+   * allowance, then a rewarded shuffle. Undo is always offered too.
+   */
   private openStuck() {
     const p = this.play;
     if (!p) return;
-    const panel = this.openModal();
+    if (this.tut) this.endTutorial(true);
+    const panel = this.openModal('compact');
     panel.dataset.testid = 'stuck';
     panel.append(el('h2', '', t('stuck.title')), el('p', '', t('stuck.text')));
-    if (!this.save.tips.includes('stuck')) {
-      // the first dead end: a gentle tip, once
-      const tip = el('div', 'tip');
-      tip.dataset.testid = 'stuck-tip';
-      tip.append(el('b', '', t('stuck.tipTitle')), el('span', '', t('stuck.tip')));
-      panel.append(tip);
-      this.save.tips = [...this.save.tips, 'stuck'];
-      saveSoon(this.save);
-    }
-    if (p.shufflesLeft > 0)
-      panel.append(
-        this.button(`${ICONS.shuffle}<span>${t('btn.shuffle')} (${p.shufflesLeft})</span>`, 'btn primary', () => {
-          this.closeModal();
-          this.doShuffle();
-        }),
-      );
-    else {
+    if (!p.rescueUsed) {
+      const b = this.button(`${ICONS.shuffle}<span>${t('stuck.freeShuffle')}</span>`, 'btn primary', () => {
+        this.closeModal();
+        p.rescueUsed = true;
+        this.doShuffle(false);
+      });
+      b.dataset.testid = 'stuck-shuffle';
+      panel.append(b);
+    } else if (p.shufflesLeft > 0) {
+      const b = this.button(`${ICONS.shuffle}<span>${t('stuck.shuffleLeft', { n: p.shufflesLeft })}</span>`, 'btn primary', () => {
+        this.closeModal();
+        this.doShuffle(true);
+      });
+      b.dataset.testid = 'stuck-shuffle';
+      panel.append(b);
+    } else {
       // a real dead end (no pairs, no shuffle left): GamePix tracks it as a sad moment
       if (__PLATFORM__ === 'gamepix') sdk.sadMoment?.('game_over');
-      panel.append(el('p', '', t('stuck.noShuffle')));
-      // rewarded "Continue": the remaining tiles are shuffled into a solvable position (no shuffle used)
-      const label = sdk.name === 'web' ? `${ICONS.shuffle}<span>${t('btn.continueFree')}</span>` : `${ICONS.play}<span>${t('ad.continue')}</span>`;
-      const b = this.adButton(label, () => {
+      const b = this.adButton(this.rewardLabel(ICONS.shuffle, 'ad.oneShuffle'), () => {
         this.closeModal();
-        p.shufflesLeft++;
-        this.doShuffle();
+        this.doShuffle(false);
       });
       b.dataset.testid = 'reward-continue';
       panel.append(b);
@@ -776,18 +952,24 @@ class App {
           this.onUndo();
         }),
       );
-    panel.append(this.button(t('btn.menu'), 'btn ghost', () => this.showTitle()));
+    panel.append(this.button(t('btn.mainMenu'), 'btn ghost', () => this.showTitle()));
   }
 
-  openSettings() {
-    const panel = this.openModal();
+  /** Settings: music, sounds, language, tile size, tile set, free-tile shading, reset progress */
+  openSettings(back?: () => void) {
+    const panel = this.openModal('settings');
     panel.dataset.testid = 'settings-panel';
-    const x = this.button(ICONS.close, 'close-x', () => this.closeModal());
+    const close = () => (back ? back() : this.closeModal());
+    const x = this.button(ICONS.close, 'close-x', close);
     x.setAttribute('aria-label', t('btn.close'));
     panel.append(x, el('h2', '', t('settings.title')));
-    const toggle = (key: StrKey, get: () => boolean, set: (v: boolean) => void, id: string) => {
-      const row = el('div', 'setting');
-      row.append(el('span', '', t(key)));
+    const row = (icon: string, key: StrKey, control: HTMLElement) => {
+      const r = el('div', 'setting');
+      const lab = el('span', 'lab', `${icon}<span>${t(key)}</span>`);
+      r.append(lab, control);
+      panel.append(r);
+    };
+    const toggle = (icon: string, key: StrKey, get: () => boolean, set: (v: boolean) => void, id: string) => {
       const b = el('button', 'toggle');
       b.type = 'button';
       b.setAttribute('role', 'switch');
@@ -800,40 +982,82 @@ class App {
         audio.play('button');
         saveNow(this.save);
       });
-      row.append(b);
-      panel.append(row);
+      row(icon, key, b);
     };
-    // tile set: illustrated Garden (default) or Classic Mahjong faces
-    const setRow = el('div', 'setting');
-    setRow.append(el('span', '', t('settings.tiles')));
-    const setSeg = el('div', 'seg');
-    for (const [k, key] of [
-      ['garden', 'settings.tilesGarden'],
-      ['classic', 'settings.tilesClassic'],
-    ] as const) {
-      const b = el('button', '', t(key));
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(this.save.tileSet === k));
-      b.dataset.testid = `tiles-${k}`;
-      b.addEventListener('click', () => {
-        if (this.save.tileSet === k) return;
-        this.save.tileSet = k;
-        saveNow(this.save);
-        audio.play('button');
-        this.view.setFaceOptions(this.faceOptions());
-        for (const o of setSeg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
-        if (this.screen === 'title') {
-          const c = document.querySelector('.logo canvas') as HTMLCanvasElement | null;
-          if (c) this.drawTitleTiles(c);
-        }
-      });
-      setSeg.append(b);
+    const seg = <T extends string>(icon: string, key: StrKey, opts: [T, StrKey][], get: () => T, set: (v: T) => void, id: string) => {
+      const s = el('div', 'seg');
+      for (const [v, k] of opts) {
+        const b = el('button', '', t(k));
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(get() === v));
+        b.dataset.testid = `${id}-${v}`;
+        b.addEventListener('click', () => {
+          if (get() === v) return;
+          set(v);
+          saveNow(this.save);
+          audio.play('button');
+          for (const o of s.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+        });
+        s.append(b);
+      }
+      row(icon, key, s);
+    };
+    toggle(ICONS.music, 'settings.music', () => this.save.music, (v) => audio.setMusic((this.save.music = v)), 'set-music');
+    toggle(ICONS.sound, 'settings.sound', () => this.save.sound, (v) => audio.setSound((this.save.sound = v)), 'set-sound');
+    // language
+    const sel = el('select', 'lang-select');
+    sel.dataset.testid = 'lang';
+    sel.setAttribute('aria-label', t('settings.language'));
+    for (const l of LANGS) {
+      const o = el('option', '', LANG_NAMES[l]);
+      o.value = l;
+      o.selected = getLang() === l;
+      sel.append(o);
     }
-    setRow.append(setSeg);
-    panel.append(setRow);
-    toggle('settings.music', () => this.save.music, (v) => audio.setMusic((this.save.music = v)), 'set-music');
-    toggle('settings.sound', () => this.save.sound, (v) => audio.setSound((this.save.sound = v)), 'set-sound');
+    sel.addEventListener('change', () => {
+      const l = sel.value;
+      if (!isLang(l) || l === getLang()) return;
+      setLang(l);
+      this.save.lang = l;
+      saveNow(this.save);
+      this.view.setFaceOptions(this.faceOptions());
+      this.relabel(back);
+    });
+    row(ICONS.globe, 'settings.language', sel);
+    seg(
+      ICONS.tiles,
+      'settings.tileSize',
+      [
+        ['normal', 'settings.sizeNormal'],
+        ['large', 'settings.sizeLarge'],
+      ],
+      () => this.save.tileSize,
+      (v) => {
+        this.save.tileSize = v;
+        this.view.preferTile = v === 'large' ? LARGE_TILE : 0;
+        this.view.resetZoom();
+        this.view.applyPreferredZoom();
+      },
+      'size',
+    );
+    seg(
+      ICONS.leaf,
+      'settings.tiles',
+      [
+        ['garden', 'settings.tilesGarden'],
+        ['classic', 'settings.tilesClassic'],
+      ],
+      () => this.save.tileSet,
+      (v) => {
+        this.save.tileSet = v;
+        this.view.setFaceOptions(this.faceOptions());
+        const c = document.querySelector('.logo canvas') as HTMLCanvasElement | null;
+        if (c) this.drawTitleTiles(c);
+      },
+      'tiles',
+    );
     toggle(
+      ICONS.star,
       'settings.highlight',
       () => this.save.highlightFree,
       (v) => {
@@ -843,6 +1067,7 @@ class App {
       'set-highlight',
     );
     toggle(
+      ICONS.chart,
       'settings.contrast',
       () => this.save.contrast,
       (v) => {
@@ -851,71 +1076,48 @@ class App {
       },
       'set-contrast',
     );
-    toggle(
-      'settings.timer',
-      () => this.save.showTimer,
-      (v) => {
-        this.save.showTimer = v;
-        this.updateHud();
-      },
-      'set-timer',
-    );
-    const lang = el('div', 'setting');
-    lang.append(el('span', '', t('settings.language')));
-    const seg = el('div', 'seg');
-    for (const [l, name] of [
-      ['en', 'English'],
-      ['fr', 'Français'],
-    ] as const) {
-      const b = el('button', '', name);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(getLang() === l));
-      b.dataset.testid = `lang-${l}`;
-      b.addEventListener('click', () => {
-        if (getLang() === l) return;
-        setLang(l);
-        this.save.lang = l;
-        saveNow(this.save);
-        this.view.setFaceOptions(this.faceOptions());
-        this.relabel();
-      });
-      seg.append(b);
-    }
-    lang.append(seg);
-    panel.append(lang);
-    panel.append(
-      this.button(t('settings.tutorial'), 'btn small', () => {
-        this.save.tutorialDone = false;
-        saveNow(this.save);
-        this.closeModal();
-        if (this.screen === 'board' && this.play) this.startTutorial();
-      }),
-    );
-    panel.append(this.button(t('btn.close'), 'btn', () => this.closeModal()));
+    const reset = this.button(`${ICONS.reset}<span>${t('settings.reset')}</span>`, 'btn ghost danger', () => this.confirmReset(back));
+    reset.dataset.testid = 'reset';
+    const done = this.button(t('btn.close'), 'btn', close);
+    done.dataset.testid = 'settings-close';
+    panel.append(reset, done);
+  }
+
+  /** "Reset progress?" with an explicit confirmation */
+  private confirmReset(back?: () => void) {
+    const panel = this.openModal('compact');
+    panel.dataset.testid = 'confirm-reset';
+    panel.append(el('h2', '', t('reset.title')), el('p', '', t('reset.text')));
+    const yes = this.button(`${ICONS.reset}<span>${t('reset.yes')}</span>`, 'btn danger-fill', () => {
+      this.play = null;
+      this.save = resetProgress(this.save);
+      saveNow(this.save);
+      this.pendingBloom = null;
+      this.showTitle();
+      this.toast(t('reset.done'), 2200);
+    });
+    yes.dataset.testid = 'reset-yes';
+    const no = this.button(t('reset.no'), 'btn', () => this.openSettings(back));
+    no.dataset.testid = 'reset-no';
+    panel.append(yes, no);
   }
 
   /** re-create the current screen in the new language */
-  private relabel() {
-    if (this.screen === 'title') {
-      this.showTitle();
-      this.openSettings();
-    } else if (this.screen === 'garden') {
-      this.showGarden(this.gardenSeason);
-      this.openSettings();
-    } else if (this.screen === 'journey') {
-      this.showJourney();
-      this.openSettings();
-    } else if (this.play) {
+  private relabel(back?: () => void) {
+    if (this.screen === 'title') this.showTitle();
+    else if (this.screen === 'garden') this.showGarden(this.gardenSeason);
+    else if (this.screen === 'journey') this.showJourney();
+    else if (this.play) {
       const p = this.play;
-      const tut = this.tutStep;
+      const step = this.tut?.step ?? 0;
       this.enterBoardScreen();
       this.play = p;
       this.view.setGame(p.gameObj);
       this.resize();
       this.updateHud();
-      if (tut) this.startTutorial(tut);
-      this.openSettings();
+      if (step) this.startTutorial(step);
     }
+    this.openSettings(this.screen === 'board' ? (back ?? undefined) : undefined);
   }
 
   openStats() {
@@ -927,6 +1129,7 @@ class App {
     const s = this.save.stats;
     const rows: [StrKey, string][] = [
       ['stats.journey', `${Math.min(this.save.journey, JOURNEY_LENGTH)} / ${JOURNEY_LENGTH}`],
+      ['stats.stars', `${this.save.stars.reduce((a, b) => a + (b || 0), 0)} / ${JOURNEY_LENGTH * 3}`],
       ['stats.played', String(s.played)],
       ['stats.won', String(s.won)],
       ['stats.rate', s.played ? Math.round((s.won / s.played) * 100) + '%' : '–'],
@@ -934,7 +1137,6 @@ class App {
       ['stats.avgTime', s.won ? fmtTime(s.totalTime / s.won) : '–'],
       ['stats.bestScore', s.bestScore ? String(s.bestScore) : '–'],
       ['stats.tiles', String(s.tilesMatched)],
-      ['stats.stars', `${this.save.stars.reduce((a, b) => a + (b || 0), 0)} / ${JOURNEY_LENGTH * 3}`],
       ['stats.bestDaily', this.save.daily.bestTime ? fmtTime(this.save.daily.bestTime) : '–'],
       ['stats.streak', t('daily.streak', { n: this.save.daily.streak })],
       ['stats.longest', t('daily.streak', { n: Math.max(this.save.daily.longest || 0, this.save.daily.streak) })],
@@ -952,11 +1154,14 @@ class App {
   private onWin() {
     const p = this.play;
     if (!p || !p.gameObj.won || this.modal) return;
+    this.endTutorial(true);
     audio.play('win');
     sdk.happytime();
     const tiles = p.gameObj.total;
-    const stars = starsFor(tiles, p.time, p.hints);
-    const timeBonus = Math.max(0, Math.round(tiles * 4 - p.time));
+    const comboSecs = p.comboSecs ?? 0;
+    const stars = starsFor(tiles, p.time, comboSecs);
+    const tg = starTargets(tiles);
+    const timeBonus = Math.max(0, Math.round((tg.three - Math.max(0, p.time - comboSecs)) * 2));
     p.score += timeBonus;
     const s = this.save.stats;
     s.won++;
@@ -966,18 +1171,22 @@ class App {
     let restored = -1;
     let season: Season = 0;
     let newBest = false;
+    let best = p.score;
     let medal: Medal | null = null;
     let dayBest = 0;
     if (p.mode === 'journey' || p.mode === 'replay') {
       const n = (p.board ?? this.save.journey + 1) - 1;
-      // best stars and time per board: replays only improve them
+      // best stars, time and score per board: replays only improve them
       const prevTime = this.save.bestTimes[n] || 0;
-      newBest = p.mode === 'replay' && (stars > (this.save.stars[n] || 0) || !prevTime || p.time < prevTime);
+      const prevScore = this.save.bestScores[n] || 0;
+      newBest = prevScore > 0 && p.score > prevScore;
       this.save.stars[n] = Math.max(this.save.stars[n] || 0, stars);
       this.save.bestTimes[n] = prevTime ? Math.min(prevTime, p.time) : p.time;
+      this.save.bestScores[n] = best = Math.max(prevScore, p.score);
       if (p.mode === 'journey') {
         restored = n % ELEMENTS_PER_SEASON;
         season = (Math.floor(n / ELEMENTS_PER_SEASON) % 4) as Season;
+        if (n < JOURNEY_LENGTH) this.pendingBloom = { season, index: restored };
         this.save.journey = Math.max(this.save.journey, n + 1);
       }
     } else if (p.day) {
@@ -998,16 +1207,50 @@ class App {
         d.longest = Math.max(d.longest || 0, d.streak);
         d.last = p.day;
         d.done = [...d.done.slice(-60), p.day];
-        d.best = Math.max(d.best, p.score);
       }
+      d.best = Math.max(d.best, p.score);
+      best = d.best;
     }
     this.save.current = null;
     saveNow(this.save);
 
-    const panel = this.openModal();
-    panel.dataset.testid = 'win';
-    panel.append(el('h2', '', p.mode === 'daily' ? t('win.dailyDone') : t('win.title')));
-    panel.append(el('div', 'sub-title', this.boardLabel(p)));
+    const outer = this.openModal('win');
+    outer.dataset.testid = 'win';
+    outer.dataset.stars = String(stars);
+    outer.append(el('h2', '', p.mode === 'daily' ? t('win.dailyDone') : t('win.title')));
+    outer.append(el('div', 'sub-title', this.boardLabel(p)));
+    const panel = el('div', 'win-main');
+    const actions = el('div', 'win-actions');
+    outer.append(panel, actions);
+    // stars pop in one by one, each with its own chime
+    const st = el('div', 'stars');
+    for (let k = 0; k < 3; k++) {
+      const sp = el('span', k < stars ? 'on' : '', ICONS.star);
+      sp.style.animationDelay = `${0.3 + k * 0.28}s`;
+      st.append(sp);
+      if (k < stars) setTimeout(() => outer.isConnected && audio.play('star', k), 300 + k * 280);
+    }
+    panel.append(st);
+    // the score counts up
+    const scoreBox = el('div', 'big-score');
+    const scoreV = el('b', '', '0');
+    scoreV.dataset.testid = 'win-score';
+    scoreBox.append(el('span', '', t('win.score')), scoreV);
+    panel.append(scoreBox);
+    const target = p.score;
+    const t0 = performance.now() + 250;
+    const count = (now: number) => {
+      if (!scoreV.isConnected) return;
+      const k = this.reducedMotion ? 1 : Math.max(0, Math.min(1, (now - t0) / 900));
+      scoreV.textContent = String(Math.round(target * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) requestAnimationFrame(count);
+    };
+    requestAnimationFrame(count);
+    if (newBest) {
+      const nb = el('div', 'new-best', t('win.newBest'));
+      nb.dataset.testid = 'new-best';
+      panel.append(nb);
+    }
     if (medal) {
       const m = el('div', `medal ${medal}`);
       m.dataset.testid = `medal-${medal}`;
@@ -1015,18 +1258,6 @@ class App {
       panel.append(m);
       panel.append(el('div', 'medal-rule', t('medal.rule', { g: fmtTime(tiles * 3), s: fmtTime(tiles * 5) })));
     }
-    if (newBest) {
-      const nb = el('div', 'new-best', t('win.newBest'));
-      nb.dataset.testid = 'new-best';
-      panel.append(nb);
-    }
-    const st = el('div', 'stars');
-    for (let k = 0; k < 3; k++) {
-      const sp = el('span', k < stars ? 'on' : '', ICONS.star);
-      sp.style.animationDelay = `${0.15 + k * 0.18}s`;
-      st.append(sp);
-    }
-    panel.append(st);
     if (restored >= 0) {
       const c = el('canvas', 'garden-thumb');
       panel.append(c, el('div', 'restored', t('win.restored', { name: t(ELEMENTS[restored].key) })));
@@ -1035,36 +1266,38 @@ class App {
     }
     const rowsWin: [StrKey, string][] = [
       ['win.time', fmtTime(p.time)],
-      ['win.score', String(p.score)],
-      ['win.hints', String(p.hints)],
+      ['win.bestCombo', p.bestCombo && p.bestCombo >= 2 ? t('hud.combo', { n: Math.min(p.bestCombo, COMBO_MAX) }) : '–'],
+      ['win.best', String(best)],
     ];
-    if (p.mode === 'replay' && p.board) rowsWin.push(['win.bestTime', fmtTime(this.save.bestTimes[p.board - 1])]);
     if (medal) {
       rowsWin.push(['win.personalBest', fmtTime(dayBest)]);
       rowsWin.push(['stats.streak', t('daily.streak', { n: this.save.daily.streak })]);
     }
+    const table = el('div', 'kv-table');
     for (const [k, v] of rowsWin) {
       const r = el('div', 'kv');
       r.append(el('span', '', t(k)), el('b', '', v));
-      panel.append(r);
+      table.append(r);
     }
-    const next = this.button(p.mode === 'daily' ? t('btn.gotoGarden') : t('btn.next'), 'btn primary', () =>
-      void this.between(() => (p.mode === 'daily' ? this.showGarden() : this.startJourney())),
+    panel.append(table);
+    if (stars < 3) panel.append(el('div', 'star-hint', t('win.starHint', { time: fmtTime(tg.three) })));
+    const next = this.button(`${ICONS.play}<span>${p.mode === 'daily' ? t('btn.journey') : t('btn.next')}</span>`, 'btn primary', () =>
+      void this.between(() => (p.mode === 'daily' ? this.showJourney() : this.startJourney())),
     );
     next.dataset.testid = 'next';
     const row = el('div', 'row');
-    const menu = this.button(t('btn.menu'), 'btn small', () => void this.between(() => this.showTitle()));
+    const menu = this.button(`${ICONS.home}<span>${t('btn.menu')}</span>`, 'btn small', () => void this.between(() => this.showTitle()));
     menu.dataset.testid = 'win-menu';
-    const journey = this.button(`${ICONS.star}<span>${t('btn.journey')}</span>`, 'btn small', () => void this.between(() => this.showJourney()));
+    const journey = this.button(`${ICONS.map}<span>${t('btn.journey')}</span>`, 'btn small', () => void this.between(() => this.showJourney()));
     journey.dataset.testid = 'win-journey';
-    row.append(menu, journey);
-    panel.append(next, row);
+    row.append(journey, menu);
+    actions.append(next, row);
     this.play = null;
   }
 
   /**
    * Next / Menu / Journey between boards: an interstitial (portal builds) only once the player has cleared at
-   * least 3 boards, and at most one per ~2 minutes
+   * least 3 boards, and at most one per ~2 minutes. Never during a board.
    */
   private async between(go: () => void) {
     if (sdk.adSlot('between') && this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
@@ -1093,9 +1326,13 @@ class App {
     requestAnimationFrame(draw);
   }
 
-  // ------------------------------------------------------------ journey (board select)
+  // ------------------------------------------------------------ journey (map + board select)
 
-  /** all boards in order, by season: stars and best time on finished boards, the next one highlighted, later locked */
+  /**
+   * The journey: per season, the garden as it is now (it blooms as boards are finished; the newest element grows in
+   * when the player comes here after a win) and its 16 boards with stars and best times. Later seasons' art is only
+   * drawn when it scrolls into view.
+   */
   showJourney() {
     this.leaveBoard();
     this.clearLayer();
@@ -1108,12 +1345,42 @@ class App {
     back.setAttribute('aria-label', t('btn.back'));
     back.dataset.testid = 'back';
     const done = Math.min(this.save.journey, JOURNEY_LENGTH);
-    head.append(back, el('h2', '', t('journey.title')), el('div', 'journey-count', t('journey.done', { n: done, total: JOURNEY_LENGTH })));
+    const stats = this.button(ICONS.chart, 'icon-btn', () => this.openStats());
+    stats.setAttribute('aria-label', t('menu.stats'));
+    stats.dataset.testid = 'stats';
+    const titleBox = el('div', 'head-title');
+    titleBox.append(el('h2', '', t('journey.title')), el('div', 'journey-count', t('journey.count', { n: done, total: JOURNEY_LENGTH })));
+    head.append(back, titleBox, stats);
     const list = el('div', 'journey-list');
-    let nextEl: HTMLElement | null = null;
+    let focus: HTMLElement | null = null;
+    const bloom = this.pendingBloom;
+    this.pendingBloom = null;
+    const lazy: [HTMLCanvasElement, () => void][] = [];
     for (let season = 0; season < 4; season++) {
       const a = season * BOARDS_PER_SEASON;
-      list.append(el('h3', 'journey-season', t('journey.season', { season: t(SEASON_KEYS[season]), a: a + 1, b: a + BOARDS_PER_SEASON })));
+      const restored = Math.max(0, Math.min(ELEMENTS_PER_SEASON, this.save.journey - a));
+      const reached = this.save.journey >= a;
+      const sec = el('section', `season${reached ? '' : ' locked'}`);
+      sec.dataset.testid = `season-${season + 1}`;
+      // the garden banner of the season
+      const banner = el('button', 'season-banner');
+      banner.type = 'button';
+      banner.setAttribute('aria-label', `${t(SEASON_KEYS[season])} · ${t('garden.progress', { n: restored, total: ELEMENTS_PER_SEASON })}`);
+      const c = el('canvas');
+      const cap = el('div', 'banner-cap');
+      cap.append(el('b', '', `${reached ? '' : ICONS.lock}${t(SEASON_KEYS[season])}`), el('span', '', t('garden.progress', { n: restored, total: ELEMENTS_PER_SEASON })));
+      const bar = el('div', 'bar', `<i style="width:${(restored / ELEMENTS_PER_SEASON) * 100}%"></i>`);
+      cap.append(bar);
+      banner.append(c, cap);
+      if (reached) banner.addEventListener('click', () => (audio.play('button'), this.showGarden(season as Season)));
+      else banner.disabled = true;
+      const blooming = bloom && bloom.season === season ? bloom.index : -1;
+      if (blooming >= 0) {
+        banner.dataset.testid = 'bloom';
+        banner.classList.add('blooming');
+      }
+      lazy.push([c, () => this.paintBanner(c, season as Season, restored, blooming)]);
+      sec.append(banner);
       const grid = el('div', 'journey-grid');
       for (let n = a; n < a + BOARDS_PER_SEASON; n++) {
         const state = n < this.save.journey ? 'done' : n === this.save.journey ? 'next' : 'locked';
@@ -1123,8 +1390,8 @@ class App {
         const name = t(`layout.${layoutAt(n).family}` as StrKey);
         let html = `<span class="num">${n + 1}</span><span class="name">${name}</span>`;
         if (state === 'done') {
-          const st = this.save.stars[n] || 0;
-          html += `<span class="mini-stars">${[0, 1, 2].map((k) => `<i class="${k < st ? 'on' : ''}">${ICONS.star}</i>`).join('')}</span>`;
+          const stn = this.save.stars[n] || 0;
+          html += `<span class="mini-stars">${[0, 1, 2].map((k) => `<i class="${k < stn ? 'on' : ''}">${ICONS.star}</i>`).join('')}</span>`;
           html += `<span class="best">${this.save.bestTimes[n] ? fmtTime(this.save.bestTimes[n]) : ''}</span>`;
         } else if (state === 'next') html += `<span class="tag">${ICONS.play}${t('journey.next')}</span>`;
         else html += `<span class="tag">${ICONS.lock}</span>`;
@@ -1137,20 +1404,63 @@ class App {
             if (state === 'done') this.startReplay(n);
             else void this.onPlay();
           });
-        if (state === 'next') nextEl = b;
+        if (state === 'next' && !bloom) focus = b;
         grid.append(b);
       }
-      list.append(grid);
+      sec.append(grid);
+      if (blooming >= 0) focus = banner;
+      list.append(sec);
     }
     s.append(head, list);
     this.ui.append(s);
     this.layer = s;
+    this.enter(s);
     this.resize();
-    // bring the next board into view
-    requestAnimationFrame(() => nextEl?.scrollIntoView({ block: 'center' }));
+    // season art is drawn when it comes into view (later seasons only if the player scrolls there)
+    const io = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((es) => {
+      for (const e of es) {
+        if (!e.isIntersecting) continue;
+        io!.unobserve(e.target);
+        lazy.find(([c]) => c === e.target)?.[1]();
+      }
+    }, { root: list, rootMargin: '200px' }) : null;
+    for (const [c, paint] of lazy) {
+      if (io) io.observe(c);
+      else paint();
+    }
+    // bring the newest garden (or the next board) into view
+    requestAnimationFrame(() => focus?.scrollIntoView({ block: 'center' }));
   }
 
-  // ------------------------------------------------------------ garden
+  /** a season banner; `blooming` >= 0: that element grows in (sparkles and a chime) */
+  private paintBanner(c: HTMLCanvasElement, season: Season, restored: number, blooming: number) {
+    const r = c.getBoundingClientRect();
+    const W = Math.max(10, r.width);
+    const H = Math.max(10, r.height);
+    if (blooming < 0 || this.reducedMotion) {
+      this.paintGarden(c, W, H, { season, restored, next: restored < ELEMENTS_PER_SEASON && restored > 0 ? restored : -1 });
+      return;
+    }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    c.width = Math.round(W * dpr);
+    c.height = Math.round(H * dpr);
+    c.style.width = W + 'px';
+    c.style.height = H + 'px';
+    const ctx = c.getContext('2d')!;
+    const t0 = performance.now() + 350;
+    setTimeout(() => c.isConnected && audio.play('restore'), 250);
+    const draw = (now: number) => {
+      if (!c.isConnected) return;
+      const k = Math.max(0, Math.min(1, (now - t0) / 1600));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawGarden(ctx, 0, 0, W, H, { season, restored: blooming + 1, reveal: { index: blooming, t: k } });
+      if (k < 1) requestAnimationFrame(draw);
+      else c.parentElement?.classList.add('bloomed');
+    };
+    requestAnimationFrame(draw);
+  }
+
+  // ------------------------------------------------------------ garden (full view of one season)
 
   private gardenSeason: Season = 0;
   private gardenCanvas: HTMLCanvasElement | null = null;
@@ -1161,14 +1471,14 @@ class App {
     this.screen = 'garden';
     this.view.setGame(null);
     const n = this.save.journey;
-    const current = (Math.min(3, Math.floor(n / ELEMENTS_PER_SEASON)) as Season);
+    const current = Math.min(3, Math.floor(n / ELEMENTS_PER_SEASON)) as Season;
     this.gardenSeason = season ?? current;
     const s = el('div', 'screen garden-screen');
     s.dataset.testid = 'garden-screen';
     const c = el('canvas');
     this.gardenCanvas = c;
     const head = el('div', 'garden-head');
-    const back = this.button(ICONS.back, 'icon-btn', () => this.showTitle());
+    const back = this.button(ICONS.back, 'icon-btn', () => this.showJourney());
     back.setAttribute('aria-label', t('btn.back'));
     back.dataset.testid = 'back';
     head.append(back, el('h2', '', t('garden.title')));
@@ -1184,111 +1494,181 @@ class App {
     const foot = el('div', 'garden-foot');
     const restored = Math.max(0, Math.min(ELEMENTS_PER_SEASON, n - this.gardenSeason * ELEMENTS_PER_SEASON));
     foot.append(el('div', 'big', `${t(SEASON_KEYS[this.gardenSeason])} · ${t('garden.progress', { n: restored, total: ELEMENTS_PER_SEASON })}`));
-    const bar = el('div', 'bar', `<i style="width:${(restored / ELEMENTS_PER_SEASON) * 100}%"></i>`);
-    foot.append(bar);
-    foot.append(
-      el(
-        'div',
-        'small',
-        restored >= ELEMENTS_PER_SEASON ? t('garden.complete') : `${t('garden.text')} ${t('garden.next', { name: t(ELEMENTS[restored].key) })}`,
-      ),
-    );
+    foot.append(el('div', 'bar', `<i style="width:${(restored / ELEMENTS_PER_SEASON) * 100}%"></i>`));
+    foot.append(el('div', 'small', restored >= ELEMENTS_PER_SEASON ? t('garden.complete') : t('garden.next', { name: t(ELEMENTS[restored].key) })));
     s.append(c, head, foot);
     this.ui.append(s);
     this.layer = s;
+    this.enter(s);
     this.resize();
   }
 
   private renderGardenCanvas() {
     const c = this.gardenCanvas;
     if (!c || !c.isConnected) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W = this.W;
-    const H = this.H;
-    c.width = Math.round(W * dpr);
-    c.height = Math.round(H * dpr);
-    c.style.width = W + 'px';
-    c.style.height = H + 'px';
-    const ctx = c.getContext('2d')!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const n = this.save.journey;
     const restored = Math.max(0, Math.min(ELEMENTS_PER_SEASON, n - this.gardenSeason * ELEMENTS_PER_SEASON));
-    drawGarden(ctx, 0, 0, W, H, { season: this.gardenSeason, restored, next: restored < ELEMENTS_PER_SEASON ? restored : -1 });
+    this.paintGarden(c, this.W, this.H, { season: this.gardenSeason, restored, next: restored < ELEMENTS_PER_SEASON ? restored : -1 });
   }
 
-  // ------------------------------------------------------------ tutorial
+  // ------------------------------------------------------------ tutorial (inside board 1)
 
+  /**
+   * Board 1 teaches by doing, one short line per step:
+   * 1. a hand shows two identical free tiles; the player matches them
+   * 2. one blocked tile is marked once, with the reason it cannot be taken
+   * 3. the helpers (Hint, Undo, Shuffle) are pointed out, then it goes away by itself
+   * "Skip" ends it at any time; once finished or skipped it never comes back.
+   */
   private startTutorial(step = 1) {
-    this.tutStep = step;
-    this.renderTutorial();
+    this.endTutorial(false);
+    const wrap = el('div', 'tut-wrap');
+    const line = el('div', 'tut');
+    line.dataset.testid = 'tutorial';
+    const hand = el('div', 'hand', HAND_SVG);
+    hand.dataset.testid = 'hand';
+    const skip = this.button(t('tut.skip'), 'tut-skip', () => this.endTutorial(true));
+    skip.dataset.testid = 'tut-skip';
+    wrap.append(line, hand);
+    this.ui.append(wrap);
+    this.tut = { step: 0, line, hand, skip, timers: [], blocked: -1 };
+    this.tutorialStep(step);
   }
 
-  private tutorialNext() {
-    if (this.tutStep >= 3) {
-      this.save.tutorialDone = true;
-      saveNow(this.save);
-      this.closeTutorial();
-      return;
-    }
-    this.tutStep++;
-    this.renderTutorial();
-  }
-
-  private closeTutorial() {
-    this.tutEl?.remove();
-    this.tutEl = null;
-    this.tutStep = 0;
-    this.view.spotlight = [];
-    this.view.invalidate();
-  }
-
-  private renderTutorial() {
-    this.tutEl?.remove();
+  private tutorialStep(n: number): void {
+    const tu = this.tut;
     const p = this.play;
-    if (!p) return;
-    const n = this.tutStep;
-    const card = el('div', 'tut');
-    card.dataset.testid = 'tutorial';
-    card.append(el('h3', '', t(`tut.${n}.title` as StrKey)), el('p', '', t(`tut.${n}.text` as StrKey)));
-    const foot = el('div', 'foot');
-    foot.append(el('span', 'step', t('tut.step', { n })));
-    const nx = this.button(n === 3 ? t('tut.done') : t('tut.next'), 'btn primary', () => this.tutorialNext());
-    nx.dataset.testid = 'tut-next';
-    foot.append(nx);
-    card.append(foot);
-    this.ui.append(card);
-    this.tutEl = card;
+    if (!tu || !p) return;
+    tu.timers.forEach(clearTimeout);
+    tu.timers = [];
+    tu.step = n;
+    this.view.spotlight = [];
+    this.view.blockedMark = -1;
+    tu.line.innerHTML = '';
+    tu.line.dataset.step = String(n);
+    const text = (key: StrKey) => tu.line.append(el('span', 'tl', t(key)));
+    const withSkip = () => tu.line.append(tu.skip);
     if (n === 1) {
       const m = p.gameObj.hint();
-      this.view.spotlight = m ? [...m] : [];
+      if (!m) return this.endTutorial(true);
+      this.view.spotlight = [...m];
+      text('tut.pick');
+      withSkip();
     } else if (n === 2) {
-      // spotlight one free and leave the shading to show blocked tiles
-      this.view.spotlight = [];
-    } else this.view.spotlight = [];
+      tu.blocked = this.pickBlocked();
+      if (tu.blocked < 0) return this.tutorialStep(3);
+      this.view.blockedMark = tu.blocked;
+      text('tut.blocked');
+      const ok = this.button(t('btn.ok'), 'tut-ok', () => this.tutorialStep(3));
+      ok.dataset.testid = 'tut-next';
+      tu.line.append(ok);
+      withSkip();
+    } else if (n === 3) {
+      text('tut.helpers');
+      withSkip();
+      if (this.hud && !this.reducedMotion) this.hud.tools.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(1.35)' }, { filter: 'brightness(1)' }], { duration: 900, iterations: 2 });
+      tu.timers.push(setTimeout(() => this.endTutorial(true), 4500));
+    } else return this.endTutorial(true);
     this.view.invalidate();
     this.placeTutorial();
-    if (n === 3 && this.hud) {
-      this.hud.tools.animate([{ transform: this.hud.tools.style.transform || 'none', filter: 'brightness(1)' }, { filter: 'brightness(1.5)' }, { filter: 'brightness(1)' }], { duration: 900, iterations: 2 });
+    this.tutorialHand();
+  }
+
+  /** a blocked tile to show: fully visible (nothing on top, only its sides closed), near the middle of the board */
+  private pickBlocked(): number {
+    const g = this.play!.gameObj;
+    const b = g.g.bounds;
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    let best = -1;
+    let bd = Infinity;
+    let fallback = -1;
+    g.present.forEach((on, i) => {
+      if (!on || g.isFree(i)) return;
+      if (fallback < 0) fallback = i;
+      if (g.g.above[i].some((j) => g.present[j])) return;
+      const [x, y] = g.g.slots[i];
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    });
+    return best >= 0 ? best : fallback;
+  }
+
+  /** move the hand: over the two tiles of the pair (step 1), on the blocked tile (2), on the helpers (3) */
+  private tutorialHand() {
+    const tu = this.tut;
+    if (!tu) return;
+    tu.timers.forEach(clearTimeout);
+    tu.timers = [];
+    const hand = tu.hand;
+    const at = (x: number, y: number) => {
+      hand.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    };
+    const tap = (delay: number) => tu.timers.push(setTimeout(() => (hand.classList.remove('tap'), void hand.offsetWidth, hand.classList.add('tap')), delay));
+    if (tu.step === 1) {
+      const spots = this.view.spotlight.filter((i) => i !== this.view.selected && this.play?.gameObj.present[i]);
+      if (!spots.length) return;
+      const loop = () => {
+        let d = 0;
+        for (const i of spots) {
+          tu.timers.push(setTimeout(() => at(...this.view.tileCenter(i)), d));
+          tap(d + 650);
+          d += 1300;
+        }
+        tu.timers.push(setTimeout(loop, d + 300));
+      };
+      loop();
+    } else if (tu.step === 2 && tu.blocked >= 0) {
+      at(...this.view.tileCenter(tu.blocked));
+      const loop = () => {
+        tap(500);
+        tu.timers.push(setTimeout(loop, 1600));
+      };
+      loop();
+      // the OK button would otherwise wait forever: move on after a while
+      tu.timers.push(setTimeout(() => this.tut?.step === 2 && this.tutorialStep(3), 9000));
+    } else if (tu.step === 3 && this.hud) {
+      const r = this.hud.hint.getBoundingClientRect();
+      at(r.x + r.width / 2, r.y + r.height / 2);
+      tap(500);
+      tu.timers.push(setTimeout(() => this.endTutorial(true), 4500));
+    }
+  }
+
+  /** end the tutorial; `done`: finished or skipped (never shown again) */
+  private endTutorial(done: boolean) {
+    const tu = this.tut;
+    if (!tu) return;
+    tu.timers.forEach(clearTimeout);
+    tu.line.parentElement?.remove();
+    this.tut = null;
+    this.view.spotlight = [];
+    this.view.blockedMark = -1;
+    this.view.invalidate();
+    if (done) {
+      this.save.tutorialDone = true;
+      saveNow(this.save);
     }
   }
 
   private placeTutorial() {
-    const card = this.tutEl;
-    if (!card || !this.hud) return;
+    const tu = this.tut;
+    if (!tu || !this.hud) return;
+    const card = tu.line;
     const area = this.boardArea();
-    const spots = this.view.spotlight.map((i) => this.view.tileRect(i));
-    const top = this.hud.root.getBoundingClientRect().bottom + 8;
-    const bottomLimit = document.body.classList.contains('portrait') ? this.hud.tools.getBoundingClientRect().top - 8 : this.H - 8;
+    const spots = [...this.view.spotlight, ...(this.view.blockedMark >= 0 ? [this.view.blockedMark] : [])].map((i) => this.view.tileRect(i));
+    const top = this.hud.root.getBoundingClientRect().bottom + 10;
+    const bottomLimit = document.body.classList.contains('portrait') ? this.hud.tools.getBoundingClientRect().top - 10 : this.H - 10;
     const h = card.getBoundingClientRect().height;
-    // prefer the bottom; move to the top if it would cover the highlighted tiles
     const atBottom = bottomLimit - h;
     const overlaps = (y: number) => spots.some((r) => r.y < y + h && r.y + r.h > y);
-    const y = !overlaps(atBottom) ? atBottom : top;
+    const y = !overlaps(atBottom) ? atBottom : !overlaps(top) ? top : atBottom;
     card.style.top = Math.max(top, y) + 'px';
-    if (document.body.classList.contains('landscape')) {
-      const tools = this.hud.tools.getBoundingClientRect();
-      card.style.left = area.x + (tools.left - area.x) / 2 + 'px';
-    } else card.style.left = '50%';
+    const cx = document.body.classList.contains('landscape') ? area.x + area.w / 2 : this.W / 2;
+    card.style.left = cx + 'px';
   }
 
   // ------------------------------------------------------------ test hooks
@@ -1303,13 +1683,19 @@ class App {
         time: this.play?.time ?? null,
         score: this.play?.score ?? null,
         journey: this.save.journey,
-        tutorial: this.tutStep,
+        tutorial: this.tut?.step ?? 0,
+        tutorialDone: this.save.tutorialDone,
         variant: this.play?.variant ?? null,
         hintsLeft: this.play?.hintsLeft ?? null,
         shufflesLeft: this.play?.shufflesLeft ?? null,
         undosLeft: this.play?.undosLeft ?? null,
+        combo: this.play?.combo ?? 0,
+        comboSecs: this.play?.comboSecs ?? 0,
         adPaused: this.adPaused,
         tileWidth: this.play ? this.view.m.w : null,
+        zoom: this.view.zoom,
+        lang: getLang(),
+        audio: audio.gate(),
       }),
       /** a good open pair (no hint consumed) and the screen centers of its tiles */
       pair: () => {
@@ -1317,6 +1703,8 @@ class App {
         const m = g?.hint(3000);
         return m ? m.map((i) => this.view.tileCenter(i)) : null;
       },
+      /** the blocked tile the tutorial marks (screen center), or null */
+      blocked: () => (this.tut && this.tut.blocked >= 0 ? this.view.tileCenter(this.tut.blocked) : null),
       center: (i: number) => this.view.tileCenter(i),
       /** the board area and the box the tiles cover (screen px) */
       fill: () => {
@@ -1341,12 +1729,13 @@ class App {
       /** skip the tutorial (tests) */
       skipTutorial: () => {
         this.save.tutorialDone = true;
-        this.closeTutorial();
+        this.endTutorial(true);
       },
       /** finish the board instantly (used by e2e tests and the art scripts) */
       solve: (leave = 0) => {
         const p = this.play;
         if (!p) return false;
+        p.clockOn = true;
         while (p.gameObj.remaining > leave) {
           const m = p.gameObj.hint(20000);
           if (!m) return false;
@@ -1360,15 +1749,18 @@ class App {
       /** demo progress for screenshots: n boards finished with varied stars and times */
       demoProgress: (n: number) => {
         this.save.journey = n;
+        this.save.tutorialDone = true;
         for (let k = 0; k < n; k++) {
           this.save.stars[k] = 1 + ((k * 7 + 3) % 3 === 0 ? 0 : (k * 5) % 3 === 0 ? 1 : 2);
-          this.save.bestTimes[k] = 70 + ((k * 37) % 9) * 14 + k * 6;
+          this.save.bestTimes[k] = 40 + ((k * 37) % 9) * 14 + k * 6;
+          this.save.bestScores[k] = 200 + k * 40;
         }
         this.save.daily = { ...this.save.daily, streak: 4, longest: 6, last: todayKey(new Date(Date.now() - 86400000)) };
         this.save.stats.won = n;
         this.save.stats.played = n + 3;
       },
       showJourney: () => this.showJourney(),
+      showTitle: () => this.showTitle(),
       /** set the board clock (screenshots of a realistic result) */
       setTime: (secs: number) => {
         if (this.play) this.play.time = secs;
@@ -1378,9 +1770,14 @@ class App {
 
   async start() {
     this.resize();
-    this.showTitle();
-    document.body.dataset.ready = '1';
+    const q = new URLSearchParams(location.search);
+    // a brand-new player goes straight into board 1 (the tutorial is inside it); everyone else sees the main menu
+    const fresh = !this.save.tutorialDone && this.save.journey === 0 && !this.save.current && !q.has('menu');
+    // loading is over before any gameplay starts
     sdk.loadingStop();
+    if (fresh) this.startJourney();
+    else this.showTitle();
+    document.body.dataset.ready = '1';
   }
 }
 

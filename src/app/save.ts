@@ -1,7 +1,8 @@
 import type { GameSnapshot } from '../game/game';
+import { isLang, type Lang } from './i18n';
 import { sdk } from './sdk';
 
-export type Lang = 'en' | 'fr';
+export type { Lang };
 
 export interface BoardInProgress {
   /** journey: the next board; replay: a finished journey board played again; daily: the date's challenge */
@@ -12,7 +13,7 @@ export interface BoardInProgress {
   /** daily: the date key (YYYY-MM-DD) */
   day?: string;
   seed: number;
-  variant: 'landscape' | 'portrait';
+  variant: 'landscape' | 'portrait' | 'short';
   game: GameSnapshot;
   time: number;
   score: number;
@@ -21,6 +22,12 @@ export interface BoardInProgress {
   hintsLeft: number;
   undosLeft?: number;
   streak: number;
+  /** the free Shuffle offered at a dead end (once per board) was used */
+  rescueUsed?: boolean;
+  /** seconds won back by combos (they count toward the stars) */
+  comboSecs?: number;
+  /** longest combo on this board */
+  bestCombo?: number;
 }
 
 export interface SaveData {
@@ -36,6 +43,10 @@ export interface SaveData {
   tips: string[];
   /** tile set: illustrated Garden (default) or Classic */
   tileSet: 'garden' | 'classic';
+  /** tile size: normal (the board fits the screen) or large (the board starts zoomed in; drag to move it) */
+  tileSize: 'normal' | 'large';
+  /** best score per journey board index */
+  bestScores: number[];
   /** boards solved in the journey (each restores one garden element) */
   journey: number;
   /** stars per journey board index */
@@ -65,6 +76,8 @@ export function defaultSave(): SaveData {
     tutorialDone: false,
     tips: [],
     tileSet: 'garden',
+    tileSize: 'normal',
+    bestScores: [],
     journey: 0,
     stars: [],
     bestTimes: [],
@@ -88,6 +101,9 @@ export function parseSave(raw: string | null | undefined): SaveData {
       bestTimes: Array.isArray(d.bestTimes) ? d.bestTimes : [],
       tips: Array.isArray(d.tips) ? d.tips : [],
       tileSet: d.tileSet === 'classic' ? 'classic' : 'garden',
+      tileSize: d.tileSize === 'large' ? 'large' : 'normal',
+      bestScores: Array.isArray(d.bestScores) ? d.bestScores : [],
+      lang: isLang(d.lang) ? d.lang : null,
       daily: { ...base.daily, ...(d.daily ?? {}), times: d.daily?.times && typeof d.daily.times === 'object' ? d.daily.times : {} },
       stats: { ...base.stats, ...(d.stats ?? {}) },
       current: d.current && typeof d.current === 'object' && d.current.game ? d.current : null,
@@ -95,6 +111,12 @@ export function parseSave(raw: string | null | undefined): SaveData {
   } catch {
     return base;
   }
+}
+
+/** "Reset progress": a fresh journey, daily record and statistics; the player's settings stay */
+export function resetProgress(d: SaveData): SaveData {
+  const fresh = defaultSave();
+  return { ...fresh, lang: d.lang, music: d.music, sound: d.sound, highlightFree: d.highlightFree, contrast: d.contrast, tileSet: d.tileSet, tileSize: d.tileSize, tutorialDone: d.tutorialDone };
 }
 
 export interface Storage {

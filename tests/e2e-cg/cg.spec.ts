@@ -3,13 +3,13 @@ import type {} from '../shared/hooks';
 
 declare global {
   interface Window {
-    __cg: { calls: string[]; ads: string[]; store: Record<string, string>; mode: 'ok' | 'fail' | 'hang' };
+    __cg: { calls: string[]; ads: string[]; store: Record<string, string>; mode: 'ok' | 'fail' | 'hang'; mute: (m: boolean) => void };
   }
 }
 
 /** a stand-in for sdk.crazygames.com/crazygames-sdk-v3.js that records every call */
 const FAKE_SDK = `
-window.__cg = { calls: [], ads: [], store: {}, mode: 'ok' };
+window.__cg = { calls: [], ads: [], store: {}, mode: 'ok', mute: () => {} };
 const rec = (n) => () => window.__cg.calls.push(n);
 window.CrazyGames = { SDK: {
   environment: 'crazygames',
@@ -17,7 +17,7 @@ window.CrazyGames = { SDK: {
   game: {
     gameplayStart: rec('gameplayStart'), gameplayStop: rec('gameplayStop'),
     loadingStart: rec('loadingStart'), loadingStop: rec('loadingStop'), happytime: rec('happytime'),
-    settings: { muteAudio: false }, addSettingsChangeListener: () => {},
+    settings: { muteAudio: new URLSearchParams(location.search).has('muted') }, addSettingsChangeListener: (cb) => { window.__cg.mute = (m) => cb({ muteAudio: m }); },
   },
   ad: { requestAd(type, cb) {
     window.__cg.ads.push(type);
@@ -30,13 +30,13 @@ window.CrazyGames = { SDK: {
   user: { systemInfo: { locale: 'en-US' } },
 } };`;
 
-async function boot(page: Page, sdk: 'fake' | 'blocked' = 'fake') {
+async function boot(page: Page, sdk: 'fake' | 'blocked' = 'fake', path = '/?menu') {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('https://sdk.crazygames.com/crazygames-sdk-v3.js', (r) =>
     sdk === 'blocked' ? r.abort() : r.fulfill({ contentType: 'application/javascript', body: FAKE_SDK }),
   );
-  await page.goto('/');
+  await page.goto(path);
   await page.waitForSelector('body[data-ready="1"]');
   return errors;
 }
@@ -105,7 +105,7 @@ test('rewarded +1 Hint after the ad; "No ad available" for 2.5 s when there is n
   for (let i = 0; i < 3; i++) await page.click('[data-testid=hint]');
   await page.click('[data-testid=hint]');
   const btn = page.locator('[data-testid=reward]');
-  await expect(btn).toHaveText(/Watch an ad: \+1 Hint/);
+  await expect(btn).toHaveText(/Watch an ad: \+1 hint/);
   await page.evaluate(() => (window.__cg.mode = 'fail'));
   await btn.click();
   await expect(btn).toHaveText('No ad available right now, try later');
@@ -128,4 +128,27 @@ test('the game stays fully playable when the SDK cannot load (localStorage saves
   await expect.poll(() => state(page).then((s) => s.journey)).toBe(1);
   expect(await page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('mahjongjadegarden')))).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test('a brand-new player is in the first board right after loading: no menu, tutorial inside the board, gameplay started', async ({ page }) => {
+  const errors = await boot(page, 'fake', '/');
+  const t0 = Date.now();
+  await expect.poll(() => state(page).then((s) => s.screen)).toBe('board');
+  expect(Date.now() - t0).toBeLessThan(5000);
+  await expect(page.locator('[data-testid=tutorial]')).toBeVisible();
+  await expect(page.locator('[data-testid=hand]')).toBeVisible();
+  const c = await calls(page);
+  expect(c.slice(0, 2)).toEqual(['loadingStart', 'loadingStop']);
+  expect(last(c, ['gameplayStart', 'gameplayStop'])).toBe('gameplayStart');
+  expect(await ads(page)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('the CrazyGames mute setting silences music and sounds, live', async ({ page }) => {
+  await boot(page, 'fake', '/?menu&muted');
+  expect((await state(page)).audio.silent).toBe(true);
+  await page.evaluate(() => window.__cg.mute(false));
+  expect((await state(page)).audio).toMatchObject({ silent: false, sfx: true, music: true });
+  await page.evaluate(() => window.__cg.mute(true));
+  expect((await state(page)).audio.silent).toBe(true);
 });
