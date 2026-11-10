@@ -141,3 +141,27 @@ jobs:
           for f in dist dist-gd dist-crazygames; do ! grep -q integration.gamepix.com $f/index.html; ! grep -q GamePixConfig $f/index.html; done
       - name: Layout audit of the GamePix board shapes (the Lily Pad board replaces the cross-shaped one)
         run: npm run audit:gamepix
+
+  web:
+    # open portals (itch.io, Newgrounds, Y8, Playgama): the ad-free web build as a zip with index.html at the root
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Web build + zip
+        run: npm run build:web && node scripts/web/zip.mjs ci-web/mahjong-jade-garden-web.zip
+      - name: Web zip checks (index.html at the root, no crazygames / gamedistribution / gamepix / googlesyndication, no http(s) request at runtime, iframe 640x480 / 960x600 / 1280x720 / 390x844, board 1 played)
+        run: node scripts/web/check.mjs ci-web/mahjong-jade-garden-web.zip --shots ci-web/checks
+      - name: Committed zip (submission-web/mahjong-jade-garden-web-v1.zip) passes the same file checks
+        run: node scripts/web/check.mjs submission-web/mahjong-jade-garden-web-v1.zip --static
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: web-zip-checks
+          path: ci-web/
