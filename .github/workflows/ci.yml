@@ -118,10 +118,21 @@ jobs:
           # a zip made the same way as the submission zip from this commit's GamePix build
           (cd dist-gamepix && zip -q -X -9 ../gamepix-ci.zip index.html)
           node scripts/check-gamepix-zip.mjs gamepix-ci.zip
-          # and the committed submission zips (v1 kept, v2 current)
+          # and the committed submission zips (v1, v2 kept, v3 current)
           node scripts/check-gamepix-zip.mjs submission-gamepix/mahjong-jade-garden-gamepix-v1.zip
           node scripts/check-gamepix-zip.mjs submission-gamepix/mahjong-jade-garden-gamepix-v2.zip
+          node scripts/check-gamepix-zip.mjs submission-gamepix/mahjong-jade-garden-gamepix-v3.zip
           test $(stat -c%s dist-gamepix/index.html) -lt 5000000
+      - name: GamePix build and newest zip declare GamePix.soundOff / soundOn and call GamePix.lang() (Player checks)
+        run: |
+          newest=$(ls submission-gamepix/mahjong-jade-garden-gamepix-v*.zip | sort -V | tail -n 1)
+          unzip -p "$newest" index.html > gamepix-newest.html
+          for f in dist-gamepix/index.html gamepix-newest.html; do
+            grep -qE 'GamePix\.soundOff[[:space:]]*=' $f || { echo "$f: no GamePix.soundOff= assignment"; exit 1; }
+            grep -qE 'GamePix\.soundOn[[:space:]]*=' $f || { echo "$f: no GamePix.soundOn= assignment"; exit 1; }
+            grep -qE 'GamePix\.lang[[:space:]]*\([[:space:]]*\)' $f || { echo "$f: no GamePix.lang() call"; exit 1; }
+          done
+          echo "OK: dist-gamepix/index.html and $newest"
       - name: The other builds never contain the GamePix SDK
         run: |
           npm run build

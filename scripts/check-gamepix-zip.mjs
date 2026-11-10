@@ -1,4 +1,4 @@
-// Checks a GamePix upload zip: node scripts/check-gamepix-zip.mjs [zip]   (default: submission-gamepix/mahjong-jade-garden-gamepix-v2.zip)
+// Checks a GamePix upload zip: node scripts/check-gamepix-zip.mjs [zip]   (default: submission-gamepix/mahjong-jade-garden-gamepix-v3.zip)
 // - index.html at the ROOT of the zip (single-file build: the only entry)
 // - the GamePix SDK v3 loaded from its URL as an external <script src> (once), with the manual lifecycle config
 // - no CrazyGames / GameDistribution code or strings
@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process';
 
 const SDK_URL = 'https://integration.gamepix.com/sdk/v3/gamepix.sdk.js';
-const zip = process.argv[2] || 'submission-gamepix/mahjong-jade-garden-gamepix-v2.zip';
+const zip = process.argv[2] || 'submission-gamepix/mahjong-jade-garden-gamepix-v3.zip';
 const errors = [];
 
 const entries = execFileSync('unzip', ['-Z1', zip]).toString().trim().split('\n');

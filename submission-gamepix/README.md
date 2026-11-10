@@ -1,7 +1,8 @@
 # Mahjong Jade Garden — GamePix submission
 
-**File:** `mahjong-jade-garden-gamepix-v2.zip` (v2: `index.html` at the root of the zip; one self-contained file, about
-320 KB zipped), built from the same code as the CrazyGames v2 build; `mahjong-jade-garden-gamepix-v1.zip` is kept.
+**File:** `mahjong-jade-garden-gamepix-v3.zip` (v3: `index.html` at the root of the zip; one self-contained file, about
+320 KB zipped; v3 also declares the legacy `GamePix.soundOff / soundOn / pause / resume` properties and reads
+`GamePix.lang()` once at boot); `mahjong-jade-garden-gamepix-v1.zip` and `-v2.zip` are kept.
 **Icon:** `icon-256x256.jpg` · **Cover:** `cover-1360x850.jpg` (v2, the game's own cover renderer with the GamePix art);
 the v1 `icon-512x512.png` and `cover-1280x720.png` are kept.
 **Video:** `gameplay-gamepix-1280x720.mp4` (about 45 s: title, one board, a rewarded hint, the local fake interstitial)
@@ -52,7 +53,8 @@ logic, garden, daily challenge, mobile, html5
 - `pause` / `resume` (idempotent): the clock stops, input is blocked, all audio is muted (AudioContext suspended);
   on resume the player's own Music / Sounds settings come back.
 - `soundOff` / `soundOn` (idempotent, `GamePix.events.on`, with the legacy `GamePix.on.soundOff / soundOn` callbacks as
-  a fallback): soundOff mutes all audio without pausing; soundOn brings it back only if the player's own settings
+  a fallback; the same handlers are also assigned to `GamePix.soundOff / soundOn / pause / resume`, and a signal that
+  arrives through both the event and the property is handled once): soundOff mutes all audio without pausing; soundOn brings it back only if the player's own settings
   allow it and no pause or ad is active (unit-tested for every order of pause, soundOff and an ad). The game also pauses and mutes when the tab is hidden
   (`visibilitychange`), never on window blur.
 - Interstitials (`ads.interstitial()`) only between boards (Next / Menu / Journey on the result screen), never before
