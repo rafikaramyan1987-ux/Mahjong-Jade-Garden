@@ -37,6 +37,17 @@ async function boot() {
     document.body.dataset.ready = '1';
     return;
   }
+  if (shot === 'levels') {
+    // loudness of every effect and both music tracks, as heard in the game (scripts/audio-levels.mjs)
+    const { SFX_LIST, renderSfx, renderMusic, loudness } = await import('./app/audio');
+    const out: Record<string, number> = {};
+    for (const s of SFX_LIST) out[s] = loudness(await renderSfx(s, s === 'combo' ? 3 : 0));
+    // music: the average over 20 s (it plays all the time, under the effects)
+    for (const k of [0, 1]) out[`music${k + 1}`] = loudness(await renderMusic(k, 20), 44100, 20);
+    (window as unknown as { __levels: unknown }).__levels = out;
+    document.body.dataset.ready = '1';
+    return;
+  }
   if (shot === 'music') {
     // offline render of a music track as WAV (base64) for the audio samples script
     const { renderTrackWav } = await import('./app/music');

@@ -124,7 +124,7 @@ body.portrait .tools { left: 0; right: 0; bottom: 0; padding: 10px 12px calc(12p
 body.landscape .tools { right: calc(12px + var(--safe-r)); top: 50%; transform: translateY(-50%); flex-direction: column; }
 .tool {
   position: relative;
-  width: 88px;
+  width: 106px;
   height: 74px;
   border-radius: 18px;
   display: flex;
@@ -134,7 +134,7 @@ body.landscape .tools { right: calc(12px + var(--safe-r)); top: 50%; transform: 
   gap: 3px;
   font-size: 16px;
   font-weight: 700;
-  padding: 2px 4px;
+  padding: 2px 3px;
 }
 body.portrait .tool { flex: 1; max-width: 124px; }
 .tool .ico { width: 32px; height: 32px; }
@@ -304,7 +304,7 @@ body.portrait .tool { flex: 1; max-width: 124px; }
 .tut-wrap { position: absolute; inset: 0; z-index: 6; }
 .tut {
   position: absolute;
-  transform: translateX(-50%);
+  translate: -50% 0;
   width: max-content;
   max-width: min(560px, calc(100% - 24px));
   display: flex;
@@ -435,7 +435,7 @@ body.short .progress { height: 8px; }
 body.short .goal { padding: 2px 8px 3px; }
 body.short .goal-stars i { width: 17px; height: 17px; }
 body.short .goal-time { font-size: 15px; }
-body.short .tool { width: 76px; height: 60px; font-size: 14px; border-radius: 15px; }
+body.short .tool { width: 92px; height: 60px; font-size: 14px; border-radius: 15px; }
 body.short .tool .ico { width: 26px; height: 26px; }
 body.short .tools { gap: 10px; }
 body.short .title-wrap { flex-direction: row; justify-content: center; gap: 28px; width: min(920px, 100%); }
@@ -451,16 +451,19 @@ body.short .stars span { width: 44px; height: 44px; }
 body.short .stars span:nth-child(2) { width: 50px; height: 50px; }
 body.short .big-score b { font-size: 30px; }
 body.short .garden-thumb { display: none; }
-body.short .panel.win { width: min(680px, 100%); }
-body.short .panel.win .win-main { display: grid; grid-template-columns: auto 1fr; column-gap: 18px; align-items: center; }
-body.short .panel.win .win-main > .stars, body.short .panel.win .win-main > .big-score, body.short .panel.win .win-main > .new-best { grid-column: 1; }
-body.short .panel.win .win-main > .kv-table { grid-column: 2; grid-row: 1 / span 3; }
-body.short .panel.win .win-main > .restored, body.short .panel.win .win-main > .star-hint, body.short .panel.win .win-main > .medal, body.short .panel.win .win-main > .medal-rule { grid-column: 1 / -1; margin: 2px 0; }
-body.short .panel.win .win-actions { display: flex; gap: 10px; align-items: stretch; }
-body.short .panel.win .win-actions > * { flex: 1; }
-body.short .panel.win .win-actions .btn { margin-top: 8px; }
 body.short .journey-list { padding-top: calc(70px + var(--safe-t)); }
 body.short .season-banner { aspect-ratio: 16 / 4.6; min-height: 120px; }
+/* landscape screens: the result screen in two columns, so it always fits without scrolling */
+@media (orientation: landscape) and (max-height: 880px) {
+  .panel.win { width: min(780px, 100%); }
+  .panel.win .win-main { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: dense; column-gap: 22px; align-items: center; }
+  .panel.win .win-main > * { grid-column: 1; }
+  .panel.win .win-main > .garden-thumb, .panel.win .win-main > .restored { grid-column: 2; }
+  .panel.win .win-main > .garden-thumb { margin-top: 0; }
+  .panel.win .win-actions { display: flex; gap: 12px; align-items: stretch; }
+  .panel.win .win-actions > .btn { flex: 1; }
+  .panel.win .win-actions > .row { flex: 1.4; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
 }

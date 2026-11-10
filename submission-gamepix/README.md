@@ -1,7 +1,9 @@
 # Mahjong Jade Garden — GamePix submission
 
-**File:** `mahjong-jade-garden-gamepix-v1.zip` (`index.html` at the root of the zip; one self-contained file, about 260 KB)
-**Icon:** `icon-512x512.png` · **Cover:** `cover-1280x720.png` (both rendered by the game's own cover renderer)
+**File:** `mahjong-jade-garden-gamepix-v2.zip` (v2: `index.html` at the root of the zip; one self-contained file, about
+320 KB zipped), built from the same code as the CrazyGames v2 build; `mahjong-jade-garden-gamepix-v1.zip` is kept.
+**Icon:** `icon-256x256.jpg` · **Cover:** `cover-1360x850.jpg` (v2, the game's own cover renderer with the GamePix art);
+the v1 `icon-512x512.png` and `cover-1280x720.png` are kept.
 **Video:** `gameplay-gamepix-1280x720.mp4` (about 45 s: title, one board, a rewarded hint, the local fake interstitial)
 Rebuild everything with `npm run submission:gamepix` (`--no-video` skips the recording).
 
@@ -48,7 +50,10 @@ logic, garden, daily challenge, mobile, html5
 - Lifecycle: `lifecycle.loading()` during boot (10 → 50 → 80 → 100, with a loading bar), `await lifecycle.loaded()`
   before the menu is shown, `lifecycle.gameStart()` once, when the first board starts.
 - `pause` / `resume` (idempotent): the clock stops, input is blocked, all audio is muted (AudioContext suspended);
-  on resume the player's own Music / Sounds settings come back. The game also pauses and mutes when the tab is hidden
+  on resume the player's own Music / Sounds settings come back.
+- `soundOff` / `soundOn` (idempotent, `GamePix.events.on`, with the legacy `GamePix.on.soundOff / soundOn` callbacks as
+  a fallback): soundOff mutes all audio without pausing; soundOn brings it back only if the player's own settings
+  allow it and no pause or ad is active (unit-tested for every order of pause, soundOff and an ad). The game also pauses and mutes when the tab is hidden
   (`visibilitychange`), never on window blur.
 - Interstitials (`ads.interstitial()`) only between boards (Next / Menu / Journey on the result screen), never before
   the 3rd cleared board and at most one per ~2 minutes; no pre-roll.
@@ -57,7 +62,8 @@ logic, garden, daily challenge, mobile, html5
   shows for 2.5 s. Every offer has a Close button.
 - `happyMoment('level_complete')` when a board is cleared, `sadMoment('game_over')` at a real dead end (no pairs and
   no shuffle left).
-- Language from `GamePix.lang()` (English and French; anything else falls back to English).
+- Language from `GamePix.lang()` (English, French, German, Italian, Spanish, Portuguese, Dutch, Polish, Turkish,
+  Russian; anything else falls back to English).
 - Progress is saved in plain `localStorage` (one known key, read with `getItem`).
 - No external links, no other ads, analytics or SDKs; no quit button; no rotate prompt (both orientations play).
 - Art: the GamePix build replaces the pictures that could be read as religious symbols with neutral garden pictures

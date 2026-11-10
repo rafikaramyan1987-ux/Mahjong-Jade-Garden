@@ -87,7 +87,7 @@ export function tileWidthIn(b: { minX: number; minY: number; maxX: number; maxY:
 
 /** board area (px) of a 390 x 844 phone in portrait (between the top bar and the buttons) and of 1280 x 720 */
 export const PHONE_PORTRAIT_AREA = { w: 374, h: 676 };
-export const DESKTOP_LANDSCAPE_AREA = { w: 1166, h: 636 };
+export const DESKTOP_LANDSCAPE_AREA = { w: 1146, h: 636 };
 /** board area (px) of a phone held sideways (844 x 390): compact bar on top, helper buttons on the right */
 export const PHONE_LANDSCAPE_AREA = { w: 724, h: 318 };
 /** smallest tile on phones held sideways, except on the hardest boards (where it may go down to SHORT_FLOOR_TILE) */

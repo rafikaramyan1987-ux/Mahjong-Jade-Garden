@@ -158,6 +158,12 @@ export function journeyLayouts(): BoardLayout[] {
   return Array.from({ length: JOURNEY_LENGTH }, (_, n) => built(n));
 }
 
+/** the shape family (and name key) of journey board n, without building the layout */
+export function familyAt(n: number): string {
+  const k = n < JOURNEY_LENGTH ? n : 32 + ((n - JOURNEY_LENGTH) % 32);
+  return SHAPES[k % SHAPES.length].family;
+}
+
 export function layoutAt(n: number): BoardLayout {
   // after the 64th board the journey goes on through the second half of the set
   return built(n < JOURNEY_LENGTH ? n : 32 + ((n - JOURNEY_LENGTH) % 32));

@@ -24,6 +24,7 @@
     "submission:gd": "node scripts/submission-gd.mjs",
     "submission:crazygames": "node scripts/submission-cg.mjs",
     "submission:gamepix": "node scripts/submission-gamepix.mjs",
+    "audio:levels": "node scripts/audio-levels.mjs --md docs/audio-levels.md --strict",
     "art": "node scripts/art.mjs",
     "record": "node scripts/record.mjs"
   },

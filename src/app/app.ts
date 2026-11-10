@@ -11,7 +11,7 @@ import { Game } from '../game/game';
 import { mulberry32 } from '../game/rng';
 import { FLOWERS } from '../game/tiles';
 import { boardTiles, tileWidthIn } from '../layouts/build';
-import { BOARDS_PER_SEASON, JOURNEY_LENGTH, VARIANTS, dailyFor, dealLayout, journeySeed, layoutAt, layoutById, variantSlots, type BoardLayout, type Variant } from '../layouts/catalog';
+import { BOARDS_PER_SEASON, JOURNEY_LENGTH, VARIANTS, dailyFor, dealLayout, familyAt, journeySeed, layoutAt, layoutById, variantSlots, type BoardLayout, type Variant } from '../layouts/catalog';
 import { BoardView, type Rect } from '../ui/boardView';
 import { ICONS } from '../ui/icons';
 import { audio } from './audio';
@@ -297,7 +297,7 @@ class App {
     const boardN = this.save.journey + 1;
     const cont = !!cur && cur.mode === 'journey';
     const play = this.button(
-      `${ICONS.play}<span class="lbl">${cont ? t('menu.continue') : t('menu.play')}<span class="sub">${t('menu.board', { n: boardN })} · ${t(`layout.${layoutAt(this.save.journey).family}` as StrKey)}</span></span>`,
+      `${ICONS.play}<span class="lbl">${cont ? t('menu.continue') : t('menu.play')}<span class="sub">${t('menu.board', { n: boardN })} · ${t(`layout.${familyAt(this.save.journey)}` as StrKey)}</span></span>`,
       'btn primary big',
       () => void this.onPlay(),
     );
@@ -319,12 +319,24 @@ class App {
     this.resize();
   }
 
-  /** the menu backdrop: the current season's garden in full bloom */
+  /** the menu backdrop: the current season's garden in full bloom (drawn once per season and screen size) */
+  private titleArt: { key: string; c: HTMLCanvasElement } | null = null;
   private renderTitleGarden() {
     const c = this.layer?.querySelector('canvas.garden-bg') as HTMLCanvasElement | null;
     if (!c) return;
     const season = Math.min(3, Math.floor(this.save.journey / ELEMENTS_PER_SEASON)) as Season;
-    this.paintGarden(c, this.W, this.H, { season, restored: ELEMENTS_PER_SEASON });
+    const key = `${season}|${this.W}|${this.H}|${window.devicePixelRatio}`;
+    if (this.titleArt?.key !== key) {
+      const art = document.createElement('canvas');
+      this.paintGarden(art, this.W, this.H, { season, restored: ELEMENTS_PER_SEASON });
+      this.titleArt = { key, c: art };
+    }
+    const a = this.titleArt.c;
+    c.width = a.width;
+    c.height = a.height;
+    c.style.width = this.W + 'px';
+    c.style.height = this.H + 'px';
+    c.getContext('2d')!.drawImage(a, 0, 0);
   }
 
   /** draw the garden into a canvas at the screen's pixel density */
@@ -1387,7 +1399,7 @@ class App {
         const b = el('button', `jcell ${state}`);
         b.type = 'button';
         b.dataset.testid = `board-${n + 1}`;
-        const name = t(`layout.${layoutAt(n).family}` as StrKey);
+        const name = t(`layout.${familyAt(n)}` as StrKey);
         let html = `<span class="num">${n + 1}</span><span class="name">${name}</span>`;
         if (state === 'done') {
           const stn = this.save.stars[n] || 0;
@@ -1661,7 +1673,8 @@ class App {
     const area = this.boardArea();
     const spots = [...this.view.spotlight, ...(this.view.blockedMark >= 0 ? [this.view.blockedMark] : [])].map((i) => this.view.tileRect(i));
     const top = this.hud.root.getBoundingClientRect().bottom + 10;
-    const bottomLimit = document.body.classList.contains('portrait') ? this.hud.tools.getBoundingClientRect().top - 10 : this.H - 10;
+    // room for the card's rise-in animation (18 px) at the bottom
+    const bottomLimit = document.body.classList.contains('portrait') ? this.hud.tools.getBoundingClientRect().top - 24 : this.H - 24;
     const h = card.getBoundingClientRect().height;
     const atBottom = bottomLimit - h;
     const overlaps = (y: number) => spots.some((r) => r.y < y + h && r.y + r.h > y);

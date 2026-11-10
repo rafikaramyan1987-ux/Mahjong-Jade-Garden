@@ -17,24 +17,26 @@ export const SFX_LIST: Sfx[] = ['select', 'match', 'mismatch', 'shuffle', 'hint'
 const CHIME = [72, 74, 76, 79, 81, 84, 86, 88, 91, 93, 96, 98];
 const midiHz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
-export const MUSIC_LEVEL = 0.3;
+export const MUSIC_LEVEL = 0.11;
+/** per-track trim so both tracks play at the same loudness (Lantern Walk is lighter) */
+export const TRACK_GAIN = [0.86, 1.36];
 export const SFX_LEVEL = 0.85;
 /**
  * Per-effect gain, so that every effect has about the same loudness (RMS over its audible part, within ±2 dB of the
  * others, see docs/audio-levels.md). Short taps are a little quieter on purpose: they happen all the time.
  */
 export const SFX_GAIN: Record<Sfx, number> = {
-  select: 1.0,
-  button: 1.0,
-  undo: 1.0,
-  mismatch: 1.0,
-  match: 1.0,
-  combo: 1.0,
-  hint: 1.0,
-  shuffle: 1.0,
-  restore: 1.0,
-  star: 1.0,
-  win: 1.0,
+  select: 2.14,
+  button: 2.45,
+  undo: 2.02,
+  mismatch: 1.58,
+  match: 0.72,
+  combo: 1.95,
+  hint: 0.97,
+  shuffle: 1.72,
+  restore: 0.94,
+  star: 0.98,
+  win: 0.7,
 };
 /** loops of a track before the other one starts */
 const LOOPS_PER_TRACK = 2;
@@ -190,6 +192,35 @@ export async function renderSfx(s: Sfx, combo = 0, sampleRate = 44100): Promise<
   return buf.getChannelData(0);
 }
 
+/** render a stretch of a music track offline at its in-game level (for the level check script) */
+export async function renderMusic(index: number, secs: number, sampleRate = 44100): Promise<Float32Array> {
+  const c = new OfflineAudioContext(1, Math.ceil(sampleRate * secs), sampleRate);
+  const g = c.createGain();
+  g.gain.value = MUSIC_LEVEL * TRACK_GAIN[index];
+  g.connect(c.destination);
+  const tr = TRACKS[index];
+  let t = 0.05;
+  for (let bar = 0; t < secs; bar++) t += scheduleBar(c, g, tr, bar, t);
+  return (await c.startRendering()).getChannelData(0);
+}
+
+/**
+ * Loudness of a sound (dBFS): the loudest 300 ms window (RMS), which is what the ear compares between short effects
+ * and music. Used by `npm run audio:levels`.
+ */
+export function loudness(x: Float32Array, sampleRate = 44100, windowSec = 0.3): number {
+  const w = Math.floor(sampleRate * windowSec);
+  let best = 0;
+  let acc = 0;
+  for (let i = 0; i < x.length; i++) {
+    acc += x[i] * x[i];
+    if (i >= w) acc -= x[i - w] * x[i - w];
+    if (i >= w - 1) best = Math.max(best, acc / w);
+  }
+  if (x.length < w) best = acc / Math.max(1, x.length);
+  return 10 * Math.log10(Math.max(1e-12, best));
+}
+
 export class GameAudio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -274,7 +305,7 @@ export class GameAudio {
     this.master.gain.cancelScheduledValues(now);
     this.master.gain.setTargetAtTime(g.silent ? 0 : 1, now, 0.05);
     this.sfxBus.gain.setTargetAtTime(this.state.sound ? SFX_LEVEL : 0, now, 0.02);
-    this.musicBus.gain.setTargetAtTime(this.state.music ? MUSIC_LEVEL : 0, now, 0.5);
+    this.musicBus.gain.setTargetAtTime(this.state.music ? MUSIC_LEVEL * TRACK_GAIN[this.track] : 0, now, 0.5);
     if (g.music && !this.timer) this.startMusic();
     if (!g.music && this.timer) this.stopMusic();
     if (g.suspend && c.state === 'running') void c.suspend().catch(() => {});
@@ -303,6 +334,8 @@ export class GameAudio {
       if (this.bar >= tr.bars * LOOPS_PER_TRACK) {
         this.bar = 0;
         this.track = (this.track + 1) % TRACKS.length;
+        // each track at its own trim, switched exactly at the loop boundary
+        if (this.state.music) this.musicBus.gain.setValueAtTime(MUSIC_LEVEL * TRACK_GAIN[this.track], this.nextBarAt);
       }
     }
   }

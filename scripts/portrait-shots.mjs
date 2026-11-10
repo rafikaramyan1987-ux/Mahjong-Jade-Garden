@@ -9,7 +9,7 @@ const { url, close } = await serve(4182);
 const b = await chromium.launch();
 for (const n of ns.length ? ns : ['1', '5', '16', '41', '63']) {
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
-  await p.goto(url + '?fresh');
+  await p.goto(url + '?fresh&menu');
   await p.waitForSelector('body[data-ready="1"]');
   await p.evaluate((k) => window.__mjg.setJourney(k - 1), +n);
   await p.click('[data-testid=play]');

@@ -1,14 +1,15 @@
-// CrazyGames submission: node scripts/submission-cg.mjs   (builds the CrazyGames and web builds itself)
-// -> submission/mahjong-jade-garden-v1.zip  (unzips to mahjong-jade-garden-v1/index.html, one single-file build)
+// CrazyGames submission (v2): node scripts/submission-cg.mjs   (builds the CrazyGames and web builds itself)
+// -> submission/mahjong-jade-garden-v2.zip  (unzips to mahjong-jade-garden-v2/index.html, one single-file build,
+//    the same structure as v1; the v1 zip is kept)
 // -> submission/cover-1920x1080.png, cover-800x1200.png, cover-800x800.png (top-left corner kept clear)
-// -> submission/trailer-1920x1080.mp4, trailer-1080x1620.mp4 (<= 20 s of real gameplay, scripts/trailer.mjs)
+// -> submission/trailer-1920x1080.mp4, trailer-1080x1920.mp4 (about 18 s of real play, no sound, scripts/trailer.mjs)
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { serve } from './serve.mjs';
 
 const OUT = 'submission';
-const NAME = 'mahjong-jade-garden-v1';
+const NAME = 'mahjong-jade-garden-v2';
 mkdirSync(OUT, { recursive: true });
 execFileSync('npm', ['run', 'build:crazygames'], { stdio: 'inherit' });
 

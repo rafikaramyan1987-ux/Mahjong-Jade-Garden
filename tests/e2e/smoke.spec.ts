@@ -80,6 +80,14 @@ test('quick matches build a combo with a label; clearing the board shows the ani
   await expect(page.locator('[data-testid=win]')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('[data-testid=win]')).toHaveAttribute('data-stars', '3');
   await expect(page.locator('[data-testid=win] .stars span.on')).toHaveCount(3);
+  // the whole result screen fits: every button can be reached without scrolling
+  await page.waitForTimeout(400);
+  for (const id of ['next', 'win-journey', 'win-menu']) {
+    const b = (await page.locator(`[data-testid=${id}]`).boundingBox())!;
+    const vp = page.viewportSize()!;
+    expect(b.y + b.height, id).toBeLessThanOrEqual(vp.height);
+    expect(b.x + b.width, id).toBeLessThanOrEqual(vp.width);
+  }
   await expect.poll(() => page.locator('[data-testid=win-score]').innerText().then(Number)).toBeGreaterThan(0);
   expect((await state(page)).journey).toBe(1);
   await page.click('[data-testid=next]');

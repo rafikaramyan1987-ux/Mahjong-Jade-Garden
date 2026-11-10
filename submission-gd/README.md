@@ -1,10 +1,13 @@
 # Mahjong Jade Garden — GameDistribution submission
 
-**File:** `mahjong-jade-garden-gd-v1.zip` (`index.html` at the root of the zip; one self-contained file, about 250 KB)
+**File:** `mahjong-jade-garden-gd-v2.zip` (v2: `index.html` at the root of the zip; one self-contained file, about 320 KB
+zipped). Built from the same code as the CrazyGames v2 build (instant start with the tutorial inside board 1, combos and
+stars, new menu, 10 languages); the GD SDK integration, the game id and the ad rules are unchanged.
+`mahjong-jade-garden-gd-v1.zip` is the previous upload, kept.
 **Thumbnails (JPG, rendered by the game):** `thumb-512x384.jpg`, `thumb-512x512.jpg`, `thumb-200x120.jpg`,
 `thumb-1280x720.jpg`, `thumb-1280x550.jpg`
 **Screenshots:** `screenshots/` (1920x1080 landscape, 1080x1920 portrait)
-**Game ID:** `2708776451364ee68eca7c869f5371e0` (built into the GD build only; checked in CI). Rebuild with `npm run submission:gd`.
+**Game ID:** `2708776451364ee68eca7c869f5371e0` (built into the GD build only; checked in CI). Rebuild with `npm run submission:gd` (`-- --zip-only` for just the zip).
 
 ## Name
 

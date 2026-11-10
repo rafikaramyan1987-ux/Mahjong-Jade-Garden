@@ -1,13 +1,14 @@
-// GameDistribution submission: node scripts/submission-gd.mjs (runs `npm run build:gd` first)
-// -> submission-gd/mahjong-jade-garden-gd-v1.zip (index.html at the root of the zip)
+// GameDistribution submission: node scripts/submission-gd.mjs [--zip-only] (runs `npm run build:gd` first)
+// -> submission-gd/mahjong-jade-garden-gd-v2.zip (index.html at the root of the zip; the v1 zip is kept)
 // -> submission-gd/thumb-*.jpg rendered by the game's own cover renderer, and screenshots from the real game
+//    (skipped with --zip-only)
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { serve } from './serve.mjs';
 
 const OUT = 'submission-gd';
-const ZIP = `${OUT}/mahjong-jade-garden-gd-v1.zip`;
+const ZIP = `${OUT}/mahjong-jade-garden-gd-v2.zip`;
 mkdirSync(OUT, { recursive: true });
 execFileSync('npm', ['run', 'build:gd'], { stdio: 'inherit' });
 
@@ -19,6 +20,8 @@ if (listing.length !== 1 || listing[0] !== 'index.html') throw new Error('zip mu
 console.log(`wrote ${ZIP} (${(statSync(ZIP).size / 1024).toFixed(0)} KB): ${listing.join(', ')}`);
 // game id, SDK once, no other portal's code
 execFileSync('node', ['scripts/check-gd-zip.mjs', ZIP], { stdio: 'inherit' });
+
+if (process.argv.includes('--zip-only')) process.exit(0);
 
 // thumbnails from the real game's cover renderer, at the exact sizes GD asks for
 const { url, close } = await serve(4183, 'gd');

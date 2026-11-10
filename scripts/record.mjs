@@ -54,20 +54,18 @@ async function record(name, viewport, dpr, touch) {
     await tap(b.x + b.width / 2, b.y + b.height / 2);
   };
   const t0 = Date.now();
-  await p.goto(url + '?fresh&seed=1987');
+  await p.goto(url + '?fresh&menu&seed=1987');
   await p.waitForSelector('body[data-ready="1"]');
   await p.waitForTimeout(2500);
   await tapSel('[data-testid=play]');
   await p.waitForSelector('[data-testid=tutorial]');
   await p.waitForTimeout(2600);
-  // tutorial step 1: match the glowing pair
+  // tutorial step 1: match the pair the hand shows; step 2: the blocked tile
   let pr = await p.evaluate(() => window.__mjg.pair());
   await tap(...pr[0]);
   await p.waitForTimeout(600);
   await tap(...pr[1]);
-  await p.waitForTimeout(2600);
-  await tapSel('[data-testid=tut-next]');
-  await p.waitForTimeout(2300);
+  await p.waitForTimeout(2000);
   await tapSel('[data-testid=tut-next]');
   await p.waitForTimeout(700);
   let k = 0;
@@ -75,7 +73,7 @@ async function record(name, viewport, dpr, touch) {
     const s = await p.evaluate(() => window.__mjg.state());
     if (s.modal === 'win' || s.remaining === null || s.remaining === 0) break;
     if (s.modal === 'stuck') {
-      await tapSel('[data-testid=stuck] .btn.primary');
+      await tapSel('[data-testid=stuck-shuffle], [data-testid=reward-continue]');
       await p.waitForTimeout(600);
       continue;
     }
