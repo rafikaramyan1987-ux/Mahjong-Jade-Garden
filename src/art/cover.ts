@@ -140,6 +140,8 @@ function vignette(ctx: C, cx: number, cy: number, rx: number, ry: number) {
 export interface CoverOptions {
   /** keep the top-left corner free of logo and tiles (CrazyGames puts its label there) */
   clearTopLeft?: boolean;
+  /** the garden and the tiles only: no title, no tagline (portals that want images without text or logo) */
+  noLogo?: boolean;
 }
 
 export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tagline: string | null = 'Classic tile solitaire in a blooming garden', o: CoverOptions = {}) {
@@ -152,6 +154,14 @@ export function renderCover(canvas: HTMLCanvasElement, W: number, H: number, tag
   const ctx = canvas.getContext('2d')!;
   ctx.scale(dpr, dpr);
   drawGarden(ctx, 0, 0, W, H, { season: 0, restored: 16 });
+  if (o.noLogo) {
+    // no text: the fan of tiles in the middle of the garden, a little larger
+    vignette(ctx, W / 2, H * 0.52, W * 0.6, H * 0.55);
+    const tw = Math.round(Math.min(W * 0.17, H * 0.22));
+    sparkle(ctx, W / 2, H * 0.48, Math.min(W * 0.42, H * 0.55));
+    fan(ctx, W / 2, H * 0.5, tw);
+    return;
+  }
   const tiny = H < 200;
   const wide = !tiny && W / H > 1.45;
   const tall = H / W >= 1.2;

@@ -6,7 +6,7 @@
  * app.ts and apply to every portal.
  */
 
-export type PlatformName = 'web' | 'gd' | 'crazygames' | 'gamepix' | 'playgama';
+export type PlatformName = 'web' | 'gd' | 'crazygames' | 'gamepix' | 'playgama' | 'gamemonetize' | 'y8';
 
 /**
  * Where an interstitial may be requested. All are outside play and follow a user input:
@@ -61,6 +61,10 @@ export interface Platform {
 
 /** an ad that has not started after this long is treated as unavailable (ms) */
 export const AD_TIMEOUT = 8000;
+/** at most one interstitial per this many ms (the same ~2 minute gap as app.ts MIDGAME_GAP) */
+export const AD_GAP = 120_000;
+/** a started ad whose end is never reported is given up after this long, so the game can never stay paused (ms) */
+export const AD_MAX = 120_000;
 
 export function loadScript(src: string, timeoutMs: number, id?: string) {
   return new Promise<void>((res, rej) => {
