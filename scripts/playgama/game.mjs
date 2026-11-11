@@ -5,6 +5,8 @@ export default {
   slug: web.slug,
   title: 'Mahjong Jade Garden',
   dist: 'dist-playgama',
+  /** the submission zip's version: submission-playgama/<slug>-playgama-v<version>.zip (v1 kept for reference) */
+  version: 2,
   exclude: web.exclude,
   /** the game's query for the tests: a brand-new player, board 1 of the journey (as in scripts/web/check.mjs) */
   query: '',
@@ -23,10 +25,6 @@ export default {
     },
     /** the reward: the offer closes and the extra hint is shown (0 while the offer is still open) */
     value: (frame) => frame.evaluate(() => (window.__mjg.state().modal === 'offer-hint' ? 0 : 1)),
-  },
-  /** the game's own interstitial rules (app.ts): none before 3 boards are cleared; pretend a player who has 3 */
-  async prepareBetween(frame) {
-    await frame.evaluate(() => window.__mjg.demoProgress(3));
   },
   /** after the star screen: Next board (the between-boards interstitial slot), then the next board opens */
   async next(frame) {

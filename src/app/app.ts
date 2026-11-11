@@ -1317,11 +1317,17 @@ class App {
   }
 
   /**
-   * Next / Menu / Journey between boards: an interstitial (portal builds) only once the player has cleared at
-   * least 3 boards, and at most one per ~2 minutes. Never during a board.
+   * Next / Menu / Journey between boards (only offered on a cleared board's result screen, so never during a board
+   * and never before the first board is finished):
+   * - Playgama: an interstitial at every one of these breaks; how often one actually shows is Bridge's call
+   *   (Bridge's own platform default delay between interstitials (no override in playgama-bridge-config.json)), as Playgama's docs require: no timers or
+   *   counters of the game's own;
+   * - other portal builds: only once the player has cleared at least 3 boards, and at most one per ~2 minutes.
    */
   private async between(go: () => void) {
-    if (sdk.adSlot('between') && this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
+    if (__PLATFORM__ === 'playgama') {
+      if (sdk.adSlot('between')) await sdk.interstitial('between');
+    } else if (sdk.adSlot('between') && this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
       this.lastAdAt = Date.now();
       await sdk.interstitial('between');
     }
