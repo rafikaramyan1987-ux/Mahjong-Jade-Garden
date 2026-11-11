@@ -21,7 +21,7 @@ const n = args.includes('--shot') ? +args[args.indexOf('--shot') + 1] : 2;
 const shot = web.shots[n - 1];
 mkdirSync(out, { recursive: true });
 const dir = mkdtempSync(join(tmpdir(), 'playgama-shots-'));
-execFileSync('unzip', ['-q', resolve(`submission-playgama/${game.slug}-playgama-v1.zip`), '-d', dir]);
+execFileSync('unzip', ['-q', resolve(`submission-playgama/${game.slug}-playgama-v${game.version}.zip`), '-d', dir]);
 const server = await serve(dir);
 const browser = await chromium.launch({ args: web.browserArgs ?? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 for (const [name, w, h] of [['landscape', 1920, 1080], ['portrait', 1080, 1920]]) {

@@ -189,14 +189,44 @@ describe('Playgama platform (Bridge)', () => {
     expect(log).toEqual(['mute', 'unmute', 'pause', 'mute', 'resume', 'unmute', 'mute']);
   });
 
-  it('without Bridge (script blocked) the game plays on: no ads, no SDK storage', async () => {
+  it('without Bridge (script blocked) the game plays on: no ads, no SDK storage, and says so in the console', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('window', {});
     vi.stubGlobal('document', { hidden: false, addEventListener: () => {} });
     const pg = new PlaygamaPlatform();
     await pg.init();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('[Playgama Bridge] window.bridge is missing'));
+    error.mockRestore();
     expect(pg.available).toBe(false);
     expect(pg.data()).toBe(null);
     expect(await pg.rewarded()).toBe(false);
     await pg.interstitial('between');
+  });
+
+  it('bridge.initialize() rejecting is logged with console.error (not silent) and the game plays on without the SDK', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const bridge = { initialize: vi.fn(async () => Promise.reject(new Error('boom'))), storage: { get: vi.fn() }, platform: { sendMessage: vi.fn() } };
+    vi.stubGlobal('window', { bridge });
+    vi.stubGlobal('document', { hidden: false, addEventListener: () => {} });
+    const pg = new PlaygamaPlatform();
+    await pg.init();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('[Playgama Bridge] bridge.initialize() failed'), expect.objectContaining({ message: 'boom' }));
+    error.mockRestore();
+    expect(bridge.storage.get).not.toHaveBeenCalled();
+    expect(pg.available).toBe(false);
+    pg.gameReady();
+    expect(bridge.platform.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('uses the outcome of index.html\'s boot bridge.initialize() (window.__playgamaBridgeInit) and does not initialize twice', async () => {
+    const { bridge, sent } = await setup(watched(false));
+    const again = { ...bridge, initialize: vi.fn(async () => {}) };
+    vi.stubGlobal('window', { bridge: again, __playgamaBridgeInit: Promise.resolve(null) });
+    const pg2 = new PlaygamaPlatform();
+    await pg2.init();
+    expect(again.initialize).not.toHaveBeenCalled();
+    expect(pg2.locale()).toBe('fr');
+    pg2.gameReady();
+    expect(sent).toContain('game_ready');
   });
 });
