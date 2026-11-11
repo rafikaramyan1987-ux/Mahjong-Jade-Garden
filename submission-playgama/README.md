@@ -57,7 +57,7 @@ mahjong, mahjong solitaire, solitaire, tile matching, puzzle, relaxing, casual, 
   `level_started` / `level_completed` before it (a board starting behind the loading screen) is held and sent right
   after it; interstitials at every break after a cleared board (Next / Journey / Menu), so never during a board and
   never before the first board is cleared, with no counter or timer of the game's own: how often one shows is Bridge's
-  call, `minimumDelayBetweenInterstitial: 120` in playgama-bridge-config.json (Playgama's interstitial docs); rewarded ads only from the labelled "Watch an ad: +1 hint /
+  call, Bridge's own platform default delay between interstitials (no override in playgama-bridge-config.json) (Playgama's interstitial docs); rewarded ads only from the labelled "Watch an ad: +1 hint /
   shuffle / undo" buttons (hidden when `isRewardedSupported` is false), the reward only after Bridge's `rewarded`
   state, the dead-end rewarded shuffle at most once per board; audio muted (AudioContext suspended) and the board
   paused during ads, on Bridge's pause state and when the page is hidden; Bridge's audio state mutes.

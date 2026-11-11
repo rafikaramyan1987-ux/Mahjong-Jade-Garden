@@ -1320,7 +1320,7 @@ class App {
    * Next / Menu / Journey between boards (only offered on a cleared board's result screen, so never during a board
    * and never before the first board is finished):
    * - Playgama: an interstitial at every one of these breaks; how often one actually shows is Bridge's call
-   *   (`minimumDelayBetweenInterstitial` in playgama-bridge-config.json), as Playgama's docs require: no timers or
+   *   (Bridge's own platform default delay between interstitials (no override in playgama-bridge-config.json)), as Playgama's docs require: no timers or
    *   counters of the game's own;
    * - other portal builds: only once the player has cleared at least 3 boards, and at most one per ~2 minutes.
    */

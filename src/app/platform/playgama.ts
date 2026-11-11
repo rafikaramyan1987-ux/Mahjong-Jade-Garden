@@ -11,9 +11,8 @@
  * - gameplay start → `level_started` (once per board); a cleared board → `level_completed` (`levelEnd()`, app.ts);
  *   Bridge has no gameplay start / stop
  * - interstitials (`advertisement.showInterstitial()`) only at the Next / Journey / Menu break after a cleared board,
- *   with the game's own rules (app.ts: never before the 3rd board is cleared, at most one per ~2 minutes,
- *   MIDGAME_GAP) plus `minimumDelayBetweenInterstitial: 120` in playgama-bridge-config.json; never during a board,
- *   no pre-roll
+ *   with no counter or timer of the game's own (app.ts between()): how often one shows is Bridge's own platform
+ *   default (no override in playgama-bridge-config.json); never during a board, no pre-roll
  * - rewarded (`advertisement.showRewarded()`) only from the labelled "Watch an ad: +1 …" buttons; `available` is
  *   Bridge's `isRewardedSupported` and app.ts hides those buttons when it is false; the reward is granted only when
  *   Bridge reports the `rewarded` state before `closed`; closed / failed without it: no reward ("No ad available")
