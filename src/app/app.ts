@@ -27,6 +27,12 @@ export const MIDGAME_GAP = 120_000;
 /** between-board interstitials only once this many boards have been cleared */
 export const ADS_AFTER_BOARDS = 3;
 const NO_AD_MS = 2500;
+/**
+ * Portal builds that hide every "watch an ad" button when the portal offers no rewarded ads: Playgama (Bridge
+ * isRewardedSupported false), GameMonetize (no rewarded API at all) and Y8 (SDK blocked or not loaded). The other
+ * builds keep their buttons (they say "No ad available right now, try later" when no ad comes).
+ */
+const noRewarded = () => (__PLATFORM__ === 'playgama' || __PLATFORM__ === 'gamemonetize' || __PLATFORM__ === 'y8') && !sdk.available;
 /** Playgama (2.2.4): boards whose dead end was already rescued by a rewarded shuffle (offered once per board) */
 const adRescued = new WeakSet<object>();
 /** matches within this many ms of each other build a combo */
@@ -402,7 +408,7 @@ class App {
   }
 
   private async onPlay() {
-    // pre-roll interstitial (GameDistribution only): only from this click, once per session
+    // pre-roll interstitial (GameDistribution, GameMonetize; Y8 `start`): only from this click, once per session
     if (!this.prerollDone) {
       this.prerollDone = true;
       if (sdk.adSlot('preroll')) {
@@ -582,8 +588,8 @@ class App {
     // a count while some are left; a TV and "+1" (rewarded ad) once they run out
     const badge = (b: HTMLButtonElement, left: number) => {
       const e = b.querySelector('.badge') as HTMLElement;
-      // Playgama without rewarded ads (Bridge isRewardedSupported false): no "+1" offer, the count just stays at 0
-      e.innerHTML = left > 0 ? String(left) : __PLATFORM__ === 'playgama' && !sdk.available ? '0' : `${sdk.name === 'web' ? '' : ICONS.tv}+1`;
+      // no rewarded ads in this build (Playgama without them, GameMonetize, Y8 without its SDK): no "+1" offer, the count just stays at 0
+      e.innerHTML = left > 0 ? String(left) : noRewarded() ? '0' : `${sdk.name === 'web' ? '' : ICONS.tv}+1`;
       e.classList.toggle('plus', left <= 0);
       b.dataset.out = String(left <= 0);
     };
@@ -815,8 +821,8 @@ class App {
   }
 
   private offerExtra(kind: 'hint' | 'shuffle' | 'undo') {
-    // Playgama: the rewarded buttons are hidden where Bridge has no rewarded ads
-    if (__PLATFORM__ === 'playgama' && !sdk.available) return;
+    // the rewarded buttons are hidden where the portal has no rewarded ads (Playgama without them, GameMonetize, Y8 without its SDK)
+    if (noRewarded()) return;
     const panel = this.openModal();
     panel.dataset.testid = `offer-${kind}`;
     const title: Record<typeof kind, StrKey> = { hint: 'ad.outHint', shuffle: 'ad.outShuffle', undo: 'ad.outUndo' };
@@ -890,9 +896,14 @@ class App {
     settings.dataset.testid = 'pause-settings';
     const menu = this.button(`${ICONS.home}<span>${t('btn.mainMenu')}</span>`, 'btn', () => this.showTitle());
     menu.dataset.testid = 'to-menu';
-    const restart = this.button(`${ICONS.reset}<span>${t('btn.restart')}</span>`, 'btn ghost', () => {
+    const restart = this.button(`${ICONS.reset}<span>${t('btn.restart')}</span>`, 'btn ghost', async () => {
       const p = this.play;
       if (!p) return;
+      // Y8: Restart (retry) is a natural break, with the pause menu open: a `next` ad, which the SDK paces
+      if (__PLATFORM__ === 'y8') {
+        await sdk.interstitial('between');
+        if (this.play !== p) return;
+      }
       // same deal from the start
       while (p.gameObj.history.length) p.gameObj.undo();
       Object.assign(p, { time: 0, score: 0, hints: 0, hintsLeft: HINTS_PER_BOARD, shufflesLeft: SHUFFLES_PER_BOARD, undosLeft: UNDOS_PER_BOARD, rescueUsed: false, comboSecs: 0, bestCombo: 0, combo: 0, clockOn: false });
@@ -953,7 +964,7 @@ class App {
       });
       b.dataset.testid = 'stuck-shuffle';
       panel.append(b);
-    } else if (__PLATFORM__ !== 'playgama' || (sdk.available && !adRescued.has(p))) {
+    } else if (__PLATFORM__ === 'playgama' ? sdk.available && !adRescued.has(p) : !noRewarded()) {
       // a real dead end (no pairs, no shuffle left): GamePix tracks it as a sad moment
       if (__PLATFORM__ === 'gamepix') sdk.sadMoment?.('game_over');
       const b = this.adButton(this.rewardLabel(ICONS.shuffle, 'ad.oneShuffle'), () => {
@@ -1322,10 +1333,13 @@ class App {
    * - Playgama: an interstitial at every one of these breaks; how often one actually shows is Bridge's call
    *   (Bridge's own platform default delay between interstitials (no override in playgama-bridge-config.json)), as Playgama's docs require: no timers or
    *   counters of the game's own;
-   * - other portal builds: only once the player has cleared at least 3 boards, and at most one per ~2 minutes.
+   * - Y8: a `next` ad at every one of these breaks; the Y8 SDK alone paces them (no frequency cap of the game's own),
+   *   and a break with no ad continues at once;
+   * - other portal builds (GameDistribution, GameMonetize, ...): only once the player has cleared at least 3 boards, and
+   *   at most one per ~2 minutes.
    */
   private async between(go: () => void) {
-    if (__PLATFORM__ === 'playgama') {
+    if (__PLATFORM__ === 'playgama' || __PLATFORM__ === 'y8') {
       if (sdk.adSlot('between')) await sdk.interstitial('between');
     } else if (sdk.adSlot('between') && this.save.stats.won >= ADS_AFTER_BOARDS && Date.now() - this.lastAdAt >= MIDGAME_GAP) {
       this.lastAdAt = Date.now();

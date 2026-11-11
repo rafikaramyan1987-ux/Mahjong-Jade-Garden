@@ -3,15 +3,15 @@ import { defineConfig, type Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 /** Portals this game can be built for; add a name here plus an implementation in src/app/platform/. */
-const PLATFORMS = ['web', 'gd', 'crazygames', 'gamepix', 'playgama'] as const;
+const PLATFORMS = ['web', 'gd', 'crazygames', 'gamepix', 'playgama', 'gamemonetize', 'y8'] as const;
 type PlatformName = (typeof PLATFORMS)[number];
 
 /** GameDistribution game id of Mahjong Jade Garden (can be overridden with GD_GAME_ID=... for testing) */
 const GD_GAME_ID = process.env.GD_GAME_ID || '2708776451364ee68eca7c869f5371e0';
 
 /**
- * Build target portal: `VITE_PLATFORM=web|gd|crazygames|gamepix|playgama`, or `--mode gd` / `--mode crazygames` / `--mode gamepix` /
- * `--mode playgama`;
+ * Build target portal: `VITE_PLATFORM=web|gd|crazygames|gamepix|playgama|gamemonetize|y8`, or `--mode gd` / `--mode crazygames` /
+ * `--mode gamepix` / `--mode playgama` / `--mode gamemonetize` / `--mode y8`;
  * default `web` (GitHub Pages, self-hosting).
  * The web build goes to dist/, the others to dist-<platform>/.
  */
@@ -99,6 +99,19 @@ function playgamaBridge(): Plugin {
 }
 
 /**
+ * Y8 build only: the Y8 SDK from Y8's CDN (docs.y8.com: `<script src="https://cdn.y8.com/minimal-sdk/2-0/y8.min.js" async>`
+ * in <head>), never a bundled copy; initialized by src/app/platform/y8.ts once it fires `y8sdk.ready`.
+ * (The GameMonetize build needs no HTML change: src/app/platform/gamemonetize.ts sets SDK_OPTIONS and injects sdk.js.)
+ */
+export const Y8_SDK_CDN = 'https://cdn.y8.com/minimal-sdk/2-0/y8.min.js';
+function y8Sdk(): Plugin {
+  return {
+    name: 'y8-sdk',
+    transformIndexHtml: { order: 'post', handler: () => [{ tag: 'script', attrs: { src: Y8_SDK_CDN, async: true }, injectTo: 'head-prepend' }] },
+  };
+}
+
+/**
  * Single-file builds: move the inlined game script (and its big inlined stylesheet with the fonts) from <head> to
  * the end of <body>, so the browser paints the small loading screen as soon as the first bytes arrive.
  */
@@ -129,7 +142,9 @@ export default defineConfig(({ mode }) => {
         ? [viteSingleFile(), gamepixHtml(), scriptLast()]
         : platform === 'playgama'
           ? [viteSingleFile(), scriptLast(), playgamaBridge()]
-          : [viteSingleFile(), scriptLast()],
+          : platform === 'y8'
+            ? [viteSingleFile(), scriptLast(), y8Sdk()]
+            : [viteSingleFile(), scriptLast()],
     // the GD game id goes into the GD build only
     define: { __PLATFORM__: JSON.stringify(platform), __GD_GAME_ID__: JSON.stringify(platform === 'gd' ? GD_GAME_ID : '') },
     build: {

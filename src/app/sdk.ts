@@ -1,17 +1,19 @@
 /**
  * The portal platform for this build, chosen at build time: `vite build` = plain web, `--mode gd` (or
- * VITE_PLATFORM=gd) = GameDistribution, `--mode crazygames` = CrazyGames, `--mode gamepix` = GamePix, `--mode playgama` = Playgama (Bridge). `__PLATFORM__` is a literal, so the bundler drops the other implementations.
+ * VITE_PLATFORM=gd) = GameDistribution, `--mode crazygames` = CrazyGames, `--mode gamepix` = GamePix, `--mode playgama` = Playgama (Bridge), `--mode gamemonetize` = GameMonetize, `--mode y8` = Y8. `__PLATFORM__` is a literal, so the bundler drops the other implementations.
  */
 import { CrazyGamesPlatform } from './platform/crazygames';
 import { GamePixPlatform } from './platform/gamepix';
+import { GameMonetizePlatform } from './platform/gamemonetize';
 import { GDPlatform } from './platform/gd';
 import { PlaygamaPlatform } from './platform/playgama';
 import { WebPlatform } from './platform/web';
+import { Y8Platform } from './platform/y8';
 import type { Platform } from './platform/types';
 
 export type { Platform, AdSlot } from './platform/types';
 
-declare const __PLATFORM__: 'web' | 'gd' | 'crazygames' | 'gamepix' | 'playgama';
+declare const __PLATFORM__: 'web' | 'gd' | 'crazygames' | 'gamepix' | 'playgama' | 'gamemonetize' | 'y8';
 
 export const sdk: Platform =
   __PLATFORM__ === 'gd'
@@ -22,4 +24,8 @@ export const sdk: Platform =
         ? new GamePixPlatform()
         : __PLATFORM__ === 'playgama'
           ? new PlaygamaPlatform()
-          : new WebPlatform();
+          : __PLATFORM__ === 'gamemonetize'
+            ? new GameMonetizePlatform()
+            : __PLATFORM__ === 'y8'
+              ? new Y8Platform()
+              : new WebPlatform();
