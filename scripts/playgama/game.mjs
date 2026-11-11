@@ -26,10 +26,6 @@ export default {
     /** the reward: the offer closes and the extra hint is shown (0 while the offer is still open) */
     value: (frame) => frame.evaluate(() => (window.__mjg.state().modal === 'offer-hint' ? 0 : 1)),
   },
-  /** the game's own interstitial rules (app.ts): none before 3 boards are cleared; pretend a player who has 3 */
-  async prepareBetween(frame) {
-    await frame.evaluate(() => window.__mjg.demoProgress(3));
-  },
   /** after the star screen: Next board (the between-boards interstitial slot), then the next board opens */
   async next(frame) {
     await frame.locator('[data-testid=next]').click({ force: true });

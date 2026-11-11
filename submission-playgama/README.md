@@ -53,9 +53,11 @@ mahjong, mahjong solitaire, solitaire, tile matching, puzzle, relaxing, casual, 
   Bridge …")` and the game plays on with no ads and no Bridge storage.
 - **Config:** `playgama-bridge-config.json` beside `index.html` (Bridge loads `./playgama-bridge-config.json`);
   `game_ready` once the loading screen is gone; `level_started` / `level_completed` per board;
-  progress through Bridge Storage only (key `mahjongjadegarden.save.v1`, read in one `storage.get`); interstitials
-  only after a cleared board (Next / Journey / Menu), never before the 3rd board is cleared and at most one per ~2
-  minutes, plus `minimumDelayBetweenInterstitial: 120`; rewarded ads only from the labelled "Watch an ad: +1 hint /
+  progress through Bridge Storage only (key `mahjongjadegarden.save.v1`, read in one `storage.get`); `game_ready` is always the first message: a
+  `level_started` / `level_completed` before it (a board starting behind the loading screen) is held and sent right
+  after it; interstitials at every break after a cleared board (Next / Journey / Menu), so never during a board and
+  never before the first board is cleared, with no counter or timer of the game's own: how often one shows is Bridge's
+  call, `minimumDelayBetweenInterstitial: 120` in playgama-bridge-config.json (Playgama's interstitial docs); rewarded ads only from the labelled "Watch an ad: +1 hint /
   shuffle / undo" buttons (hidden when `isRewardedSupported` is false), the reward only after Bridge's `rewarded`
   state, the dead-end rewarded shuffle at most once per board; audio muted (AudioContext suspended) and the board
   paused during ads, on Bridge's pause state and when the page is hidden; Bridge's audio state mutes.

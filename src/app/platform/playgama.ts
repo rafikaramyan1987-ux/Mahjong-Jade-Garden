@@ -108,6 +108,8 @@ export class PlaygamaPlatform implements Platform {
   private playing = false;
   private levelOn = false;
   private readySent = false;
+  /** gameplay messages waiting for game_ready (see send) */
+  private held: string[] = [];
   private pausedBy = new Set<PauseReason>();
   paused = false;
   /** Bridge says the platform's audio is off (independent of pauses) */
@@ -239,14 +241,15 @@ export class PlaygamaPlatform implements Platform {
     if (this.readySent || !this.b) return;
     this.readySent = true;
     this.send('game_ready');
-    // a new player's board 1 starts while the loading screen fades out: its level_started follows game_ready
-    if (this.levelOn) this.send('level_started');
+    // gameplay messages sent while the loading screen was still up (a new player's board 1 starts behind it) follow
+    // game_ready, in their order
+    for (const m of this.held.splice(0)) this.send(m);
   }
   gameplayStart() {
     this.playing = true;
     if (this.levelOn) return;
     this.levelOn = true;
-    if (this.readySent || !this.b) this.send('level_started');
+    this.send('level_started');
   }
   gameplayStop() {
     this.playing = false;
@@ -259,7 +262,16 @@ export class PlaygamaPlatform implements Platform {
   }
   happytime() {}
   sadMoment() {}
+  /**
+   * Every Bridge message goes through here. Playgama: `game_ready` comes first, so any gameplay message (level_started,
+   * level_completed, …) before it is held and sent right after it.
+   */
   private send(m: string) {
+    if (!this.b) return;
+    if (m !== 'game_ready' && !this.readySent) {
+      this.held.push(m);
+      return;
+    }
     this.log.push(m);
     try {
       void Promise.resolve(this.b?.platform.sendMessage(m)).catch(() => {});

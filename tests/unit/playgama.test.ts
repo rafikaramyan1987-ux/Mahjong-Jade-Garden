@@ -229,4 +229,18 @@ describe('Playgama platform (Bridge)', () => {
     pg2.gameReady();
     expect(sent).toContain('game_ready');
   });
+
+  it('records every Bridge call: game_ready is sent before any level_started / gameplay event, even if a board starts behind the loading screen', async () => {
+    const { pg, sent } = await setup(watched(false));
+    pg.gameplayStart();
+    pg.levelEnd(true);
+    pg.gameplayStart();
+    expect(sent).toEqual([]);
+    pg.gameReady();
+    expect(sent).toEqual(['game_ready', 'level_started', 'level_completed', 'level_started']);
+    pg.levelEnd(false);
+    expect(sent.at(-1)).toBe('level_failed');
+    const firstGameplay = sent.findIndex((m) => m !== 'game_ready');
+    expect(sent.indexOf('game_ready')).toBeLessThan(firstGameplay);
+  });
 });
